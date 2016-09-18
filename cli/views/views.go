@@ -16,7 +16,7 @@ type ViewData struct {
 	Data    interface{}
 }
 
-var LayoutDir string = "views/layouts"
+var LayoutDir string = "cli/views/layouts"
 
 func NewView(layout string, files ...string) *View {
 	files = append(files, layoutFiles()...)

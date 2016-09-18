@@ -101,3 +101,8 @@ func (s *Server) insert2DB(r *pb.Record) error {
 	fmt.Printf("received:%v", r)
 	return nil
 }
+
+//NewServer create an Server instance
+func NewServer(client *cli.Client) *Server {
+	return &Server{c: client}
+}

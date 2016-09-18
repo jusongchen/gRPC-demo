@@ -4,6 +4,7 @@ package cli
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"google.golang.org/grpc"
@@ -25,8 +26,8 @@ type Peer struct {
 
 //Client not exported
 type Client struct {
-	OwnAddr string
-
+	OwnAddr     string
+	consolePort int
 	//set to true after connected to any peers
 	Connected bool
 	Peers     []Peer
@@ -125,9 +126,9 @@ func (c *Client) QueryAndAddPeers() error {
 		if addr == c.OwnAddr {
 			continue
 		}
-		err_ := c.AddPeer(addr)
-		if err_ != nil {
-			err = err_
+		errAdd := c.AddPeer(addr)
+		if errAdd != nil {
+			err = errAdd
 		}
 
 	}
@@ -160,64 +161,6 @@ func (c *Client) AddPeer(clientAddr string) error {
 	log.Printf("Server %s: peer update:", c.OwnAddr)
 	for i := range c.Peers {
 		log.Printf("Connect to peer %s", c.Peers[i].Addr)
-	}
-	return nil
-}
-
-func (c *Client) MonitorAndPromoteChg() error {
-	// ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second) // HL
-	// defer cancel()
-
-	changeChannel := make(chan chRowSet)
-	go func() {
-		err := c.getChgData(changeChannel)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	for {
-		select {
-		//there are changes coming in
-		case dataCh := <-changeChannel:
-
-			// fmt.Printf("\n%s generate data changes request:\n", c.OownAddr)
-
-			ctx := context.Background()
-			err := c.DataChange(ctx, dataCh)
-			if err != nil {
-				return errors.Wrap(err, "client.DataChange()")
-			}
-		}
-	}
-	close(changeChannel)
-	return nil
-}
-
-type chRowSet chan *pb.Record
-
-func (c *Client) getChgData(ch chan<- chRowSet) error {
-	// db.GetChanges()
-
-	for batch := 0; ; batch++ {
-		//do nothing if not connected to any peer , Or
-		if !c.Connected {
-			log.Printf("Not connected to any peers.\n")
-			time.Sleep(time.Second)
-			continue
-		}
-
-		dataCh := make(chRowSet)
-		//pass out new data channel
-
-		ch <- dataCh
-
-		//populate data
-		// dataCh <- &chRowSet
-
-		//all data populated
-		close(dataCh)
-
 	}
 	return nil
 }
@@ -295,4 +238,30 @@ func (c *Client) DataChange(ctx context.Context, chRows <-chan *pb.Record, opts 
 			r.RecordCount, p.Addr, r.ElapsedTime, float64(r.RecordCount)/float64(r.ElapsedTime))
 	}
 	return nil
+}
+
+// NewClient creates a NewClient instance
+func NewClient(joinTo string, serverPort, consolePort int) *Client {
+
+	c := Client{OwnAddr: getOwnAddr(serverPort), consolePort: consolePort}
+	//launch the client go rountine
+	go func() {
+		if err := c.connToPeers(joinTo); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	return &c
+}
+
+func getOwnAddr(portNumber int) string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "os.Hostname fail"))
+	}
+	return fmt.Sprintf("%s:%d", hostname, portNumber)
+}
+
+//Run starts console and wait user input
+func (c *Client) Run() error {
+	return c.openConsole()
 }

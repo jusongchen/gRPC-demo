@@ -17,16 +17,15 @@ import (
 	"github.com/jusongchen/gRPC-demo/cli"
 	pb "github.com/jusongchen/gRPC-demo/replica"
 	"github.com/jusongchen/gRPC-demo/svr"
-	"github.com/pkg/errors"
 )
 
 var (
 	// peers = flag.String("peers", "localhost:36061,localhost:36062", "comma-separated peer addresses")
-	portServe = flag.Int("p", 36060, "the port to bind to.")
-	joinTo    = flag.String("join", "",
+	serverPort = flag.Int("p", 36060, "the port to bind to.")
+	joinTo     = flag.String("join", "",
 		`       A address to use when a new node is joining an existing cluster. 
 		For the first node in a cluster, -join should NOT be specified.`)
-	portConsole = flag.Int("pConsole", 36060, "the port for the console to bind to.")
+	consolePort = flag.Int("ConsolePort", 8080, "the port for the console to bind to.")
 )
 
 func main() {
@@ -34,32 +33,25 @@ func main() {
 
 	go handleSignals()
 
+	client := cli.NewClient(*joinTo, *serverPort, *consolePort)
+
 	go func() {
 		//launch the server goroutine
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *portServe)) // RPC port
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *serverPort)) // RPC port
 		if err != nil {
 			log.Fatalf("\nfailed to listen: %v", err)
 		}
 
 		g := grpc.NewServer()
 
-		s := &svr.Server{c: &client}
+		// s := &svr.Server{c: &client}
+		s := svr.NewServer(client)
 
 		pb.RegisterSyncUpServer(g, s)
 		g.Serve(lis)
 	}()
 
-	client := cli.Client{ownAddr: getOwnAddr(*portServe)}
-	//launch the client go rountine
-	if err := client.connToPeers(*joinTo); err != nil {
-		log.Fatal(err)
-	}
-	go func() {
-		if err := client.MonitorAndPromoteChg(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
+	log.Fatal(client.Run())
 }
 
 func handleSignals() {
@@ -77,13 +69,4 @@ func handleSignals() {
 		wg.Done()
 	}()
 	wg.Wait()
-}
-
-func getOwnAddr(portNumber int) string {
-	hostname, err := os.Hostname()
-	// hostname = "localhost"
-	if err != nil {
-		log.Fatal(errors.Wrap(err, "os.Hostname fail"))
-	}
-	return fmt.Sprintf("%s:%d", hostname, portNumber)
 }

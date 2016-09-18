@@ -1,26 +1,27 @@
 //Package console offer an web server console
-package console
+package cli
 
 import (
 	"fmt"
 	"net/http"
 	"time"
 
-	"log"
-
 	"github.com/julienschmidt/httprouter"
-	"github.com/jusongchen/goLearning/goWeb/views"
+	"github.com/jusongchen/gRPC-demo/cli/views"
 )
 
 var (
 	index, contact, msg *views.View
+	client              *Client
+	viewsDir            = "cli/views/"
 )
 
 //Start starts an http Server
-func Start(port int) {
-	index = views.NewView("bootstrap", "views/index.gohtml")
-	contact = views.NewView("bootstrap", "views/contacts.gohtml")
-	msg = views.NewView("bootstrap", "views/message.gohtml")
+func (c *Client) openConsole() error {
+	client = c
+	index = views.NewView("bootstrap", viewsDir+"index.gohtml")
+	contact = views.NewView("bootstrap", viewsDir+"contacts.gohtml")
+	msg = views.NewView("bootstrap", viewsDir+"message.gohtml")
 
 	router := httprouter.New()
 	router.GET("/", indexHandler)
@@ -30,7 +31,7 @@ func Start(port int) {
 
 	router.GET("/dashboard", dashboardHandler)
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), router))
+	return http.ListenAndServe(fmt.Sprintf(":%d", c.consolePort), router)
 
 }
 
