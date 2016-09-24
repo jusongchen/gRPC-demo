@@ -20,7 +20,7 @@ type Peer struct {
 	Addr string
 	// lastAliveTime time.Time
 	RpcClient  pb.SyncUpClient
-	in         chan *pb.Record
+	in         chan *pb.ChatMsg
 	lastRpcErr error
 }
 
@@ -43,7 +43,7 @@ type nodeChgResult struct {
 	err error
 }
 
-// func (c *Client) NodeChange(ctx context.Context, req *pb.NodeChgRequest, opts ...grpc.CallOption) (*pb.NodeChgResponse, error) {
+//NodeChange handles node change request
 func (c *Client) NodeChange(ctx context.Context, req *pb.NodeChgRequest, opts ...grpc.CallOption) error {
 
 	ch := make(chan *nodeChgResult, len(c.Peers))
@@ -154,7 +154,7 @@ func (c *Client) AddPeer(clientAddr string) error {
 	// log.Printf("Connected to peer:%s\n", clientAddr)
 	// c.inCluster = true
 
-	peer := Peer{Addr: clientAddr, RpcClient: pb.NewSyncUpClient(conn), in: make(chan *pb.Record)}
+	peer := Peer{Addr: clientAddr, RpcClient: pb.NewSyncUpClient(conn), in: make(chan *pb.ChatMsg)}
 
 	c.Peers = append(c.Peers, peer)
 	c.Connected = true
@@ -165,22 +165,42 @@ func (c *Client) AddPeer(clientAddr string) error {
 	return nil
 }
 
-// Change issues Change RPCs in parallel to the peers and get change status.
-func (c *Client) DataChange(ctx context.Context, chRows <-chan *pb.Record, opts ...grpc.CallOption) error {
+// NewClient creates a NewClient instance
+func NewClient(joinTo string, serverPort, consolePort int) *Client {
+
+	hostname, _ := os.Hostname()
+
+	c := Client{
+		OwnAddr:     fmt.Sprintf("%s:%d", hostname, serverPort),
+		consolePort: consolePort,
+	}
+	//launch the client go rountine
+	go func() {
+		if err := c.connToPeers(joinTo); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	return &c
+}
+
+//PromoteDataChange makes  RPC calls in parallel to the peers and get change status.
+func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
+
 	if !c.Connected {
 		return fmt.Errorf("Not connected to any peers.")
 	}
+	ctx := context.Background()
 
 	ch := make(chan *pb.DataChgSummary, len(c.Peers))
 
 	//replicate changes to peer channels
 	for i := range c.Peers {
-		c.Peers[i].in = make(chan *pb.Record)
+		c.Peers[i].in = make(chan *pb.ChatMsg)
 	}
 
 	go func() {
 		rowCnt := 0
-		for r := range chRows {
+		for _, r := range records {
 			rowCnt++
 			// fmt.Printf("replicate row:%v\n", r)
 			for i := range c.Peers {
@@ -204,7 +224,7 @@ func (c *Client) DataChange(ctx context.Context, chRows <-chan *pb.Record, opts 
 			continue
 		}
 
-		go func(client pb.SyncUpClient, in <-chan *pb.Record) {
+		go func(client pb.SyncUpClient, in <-chan *pb.ChatMsg) {
 			//	DataChange(ctx context.Context, opts ...grpc.CallOption) (SyncUp_DataChangeClient, error)
 			startTime := time.Now()
 
@@ -238,27 +258,6 @@ func (c *Client) DataChange(ctx context.Context, chRows <-chan *pb.Record, opts 
 			r.RecordCount, p.Addr, r.ElapsedTime, float64(r.RecordCount)/float64(r.ElapsedTime))
 	}
 	return nil
-}
-
-// NewClient creates a NewClient instance
-func NewClient(joinTo string, serverPort, consolePort int) *Client {
-
-	c := Client{OwnAddr: getOwnAddr(serverPort), consolePort: consolePort}
-	//launch the client go rountine
-	go func() {
-		if err := c.connToPeers(joinTo); err != nil {
-			log.Fatal(err)
-		}
-	}()
-	return &c
-}
-
-func getOwnAddr(portNumber int) string {
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Fatal(errors.Wrap(err, "os.Hostname fail"))
-	}
-	return fmt.Sprintf("%s:%d", hostname, portNumber)
 }
 
 //Run starts console and wait user input

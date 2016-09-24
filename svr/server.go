@@ -95,7 +95,7 @@ func (s *Server) DataChange(stream pb.SyncUp_DataChangeServer) error {
 	}
 }
 
-func (s *Server) insert2DB(r *pb.Record) error {
+func (s *Server) insert2DB(r *pb.ChatMsg) error {
 
 	//For now, just write to stdout
 	fmt.Printf("received:%v", r)

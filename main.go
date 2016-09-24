@@ -28,6 +28,23 @@ var (
 	consolePort = flag.Int("ConsolePort", 8080, "the port for the console to bind to.")
 )
 
+func handleSignals() {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, os.Kill)
+	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGTRAP)
+	// signal.Notify(signalCh, os.Interrupt)
+	go func() {
+		<-signalCh
+
+		fmt.Printf("\n processing signal")
+		wg.Done()
+	}()
+	wg.Wait()
+}
+
 func main() {
 	flag.Parse()
 
@@ -52,21 +69,4 @@ func main() {
 	}()
 
 	log.Fatal(client.Run())
-}
-
-func handleSignals() {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt, os.Kill)
-	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGTRAP)
-	// signal.Notify(signalCh, os.Interrupt)
-	go func() {
-		<-signalCh
-
-		fmt.Printf("\n processing signal")
-		wg.Done()
-	}()
-	wg.Wait()
 }

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 service SyncUp {
   // DataChange() send data change requests to peers
-  rpc DataChange(stream Record) returns (DataChgSummary) {}
+  rpc DataChange(stream ChatMsg) returns (DataChgSummary) {}
 
   // NodeChange send Join or Quit request to other peers
   rpc NodeChange(NodeChgRequest) returns (NodeChgResponse) {}
@@ -15,9 +15,9 @@ service SyncUp {
 }
 
 
-message Record {
-  int32  key = 1;
-  string value = 2; 
+message ChatMsg {
+  int32  userid = 1;
+  string message= 2; 
 }
 
 message DataChgSummary {
