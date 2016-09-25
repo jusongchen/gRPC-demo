@@ -43,6 +43,8 @@ func handleSignals() {
 		wg.Done()
 	}()
 	wg.Wait()
+	fmt.Printf("\nOK to exit now.")
+	os.Exit(1)
 }
 
 func main() {
@@ -65,6 +67,7 @@ func main() {
 		s := svr.NewServer(client)
 
 		pb.RegisterSyncUpServer(g, s)
+		log.Printf("Starting server, RPC port %d, console port %d ...", *serverPort, *consolePort)
 		g.Serve(lis)
 	}()
 

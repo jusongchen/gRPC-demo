@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	index, contact, msg *views.View
-	client              *Client
-	viewsDir            = "cli/views/"
+	index, contact, msg, dashboard *views.View
+	client                         *Client
+	viewsDir                       = "cli/views/"
 )
 
 //Start starts an http Server
@@ -23,6 +23,7 @@ func (c *Client) openConsole() error {
 	index = views.NewView("bootstrap", viewsDir+"index.gohtml")
 	contact = views.NewView("bootstrap", viewsDir+"contacts.gohtml")
 	msg = views.NewView("bootstrap", viewsDir+"message.gohtml")
+	// dashboard = views.NewView("bootstrap", viewsDir+"dashboard.gohtml")
 
 	router := httprouter.New()
 	router.GET("/", indexHandler)
@@ -30,7 +31,7 @@ func (c *Client) openConsole() error {
 	router.GET("/message", msgHandler)
 	router.POST("/message", msgHandler)
 
-	// router.GET("/dashboard", dashboardHandler)
+	router.GET("/dashboard", dashboardHandler)
 
 	return http.ListenAndServe(fmt.Sprintf(":%d", c.consolePort), router)
 
@@ -72,4 +73,10 @@ func msgHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 		}
 	}
+}
+
+func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	// dashboard.Render(w, client)
+	fmt.Fprintf(w, "%v", client)
+
 }
