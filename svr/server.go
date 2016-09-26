@@ -17,7 +17,7 @@ import (
 // Server  not exported
 type Server struct {
 	c               *cli.Client
-	NumMsgReceived  int
+	NumMsgReceived  int64
 	LastMsgReceived time.Time
 }
 
@@ -31,7 +31,7 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 		s.c.NodeChange(ctx, &pb.NodeChgRequest{Operation: pb.NodeChgRequest_ADD, NodeAddr: req.NodeAddr})
 
 		//add this new node as peer
-		if err := s.c.AddPeer(req.NodeAddr); err != nil {
+		if err := s.c.AddPeerByAddr(req.NodeAddr); err != nil {
 			return &pb.NodeChgResponse{Fail: true}, errors.Wrap(err, "Server:NodeChgJoin:AddPeer fail")
 		}
 		return &pb.NodeChgResponse{Fail: false}, nil
@@ -41,7 +41,7 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 
 		// log.Printf("get NodeChgRequest:AddNode:%s", req.NodeAddr)
 		//add this new node as peer
-		if err := s.c.AddPeer(req.NodeAddr); err != nil {
+		if err := s.c.AddPeerByAddr(req.NodeAddr); err != nil {
 			return &pb.NodeChgResponse{Fail: true}, errors.Wrapf(err, "Server:NodeChgAdd:AddPeer %s fail", req.NodeAddr)
 		}
 		return &pb.NodeChgResponse{Fail: false}, nil
@@ -55,14 +55,28 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 
 func (s *Server) NodeQuery(ctx context.Context, req *pb.NodeQryRequest) (*pb.NodeQryResponse, error) {
 	// fmt.Printf("\nServer get Node query request:%#v\n", req)
+	// rpcAddr := fmt.Sprintf("%s:%d", s.c.Hostname, s.c.RPCPort)
 
-	//return server's own address as well
-	addrs := []string{s.c.OwnAddr}
+	nodes := []*pb.Node{}
+
+	//return this server's own address as well
+	n := pb.Node{
+		Hostname:    s.c.Hostname,
+		RPCPort:     s.c.RPCPort,
+		ConsolePort: s.c.ConsolePort,
+	}
+	nodes = append(nodes, &n)
+
 	for _, p := range s.c.Peers {
-		addrs = append(addrs, p.Addr)
+		n = pb.Node{
+			Hostname:    p.Hostname,
+			RPCPort:     p.RPCPort,
+			ConsolePort: p.ConsolePort,
+		}
+		nodes = append(nodes, &n)
 	}
 
-	return &pb.NodeQryResponse{NodeAddr: addrs}, nil
+	return &pb.NodeQryResponse{Nodes: nodes}, nil
 }
 
 func (s *Server) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
@@ -73,17 +87,20 @@ func (s *Server) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingRespons
 func (s *Server) DataChange(stream pb.SyncUp_DataChangeServer) error {
 
 	var rowCount int64
-
+	defer func() {
+		s.NumMsgReceived += rowCount
+		s.LastMsgReceived = time.Now()
+	}()
 	startTime := time.Now()
 	for {
 		record, err := stream.Recv()
 
 		if err == io.EOF {
 			endTime := time.Now()
-			log.Printf("Server %s received %d records and sync'ed them to DB.", s.c.OwnAddr, rowCount)
+			log.Printf("Server %s received %d records and sync'ed them to DB.", s.c.RPCPort, rowCount)
 			return stream.SendAndClose(&pb.DataChgSummary{
 				RecordCount: rowCount,
-				ElapsedTime: int32(endTime.Sub(startTime).Seconds()),
+				ElapsedTime: uint64(endTime.Sub(startTime)),
 			})
 		}
 		if err != nil {

@@ -18,9 +18,9 @@ import (
 
 //Console is not exported
 type Console struct {
-	ConsolePort int
-	Cli         *cli.Client
-	Svr         *svr.Server
+	// ConsolePort int
+	Cli *cli.Client
+	Svr *svr.Server
 }
 
 var (
@@ -31,12 +31,12 @@ var (
 )
 
 //Start starts an http Server
-func Start(consolePort int, client *cli.Client, server *svr.Server) error {
+func Start(client *cli.Client, server *svr.Server) error {
 
 	console = Console{
-		ConsolePort: consolePort,
-		Cli:         client,
-		Svr:         server,
+		// ConsolePort: consolePort,
+		Cli: client,
+		Svr: server,
 	}
 
 	index = views.NewView("bootstrap", viewsDir+"index.gohtml")
@@ -56,7 +56,7 @@ func Start(consolePort int, client *cli.Client, server *svr.Server) error {
 
 	router.GET("/dashboard", dashboardHandler)
 
-	return http.ListenAndServe(fmt.Sprintf(":%d", console.ConsolePort), router)
+	return http.ListenAndServe(fmt.Sprintf(":%d", client.ConsolePort), router)
 
 }
 
@@ -73,10 +73,10 @@ func msgHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	case "GET":
 		msg.Render(w, nil)
 	case "POST":
-		msg := fmt.Sprintf("Post called:%s message: %s", r.FormValue("userid"), r.FormValue("message"))
-		fmt.Printf(msg)
+		// msg := fmt.Sprintf("Post called:%s message: %s", r.FormValue("userid"), r.FormValue("message"))
+		// fmt.Printf(msg)
 
-		fmt.Fprintf(w, "Get form values: %v", r.Form)
+		// fmt.Fprintf(w, "Get form values: %v", r.Form)
 
 		records := []*pb.ChatMsg{}
 		userid, err := strconv.Atoi(r.FormValue("userid"))
@@ -93,7 +93,7 @@ func msgHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		if err != nil {
 			fmt.Fprintf(w, "%v", err)
 		} else {
-
+			msg.Render(w, nil)
 		}
 	}
 }

@@ -1,13 +1,50 @@
+<div class="container">  
+  <!-- <div class="jumbotron"> -->
+   <div class="row">
+        <div class="col-xs-6">
+			<p>Hostname: {{.Cli.Hostname}}</p>	
+		</div>
+        <div class="col-xs-3">
+			<p>RPC Port: {{.Cli.RPCPort}} </p>	
+		</div>
+		<div class="col-xs-3">
+			Console Port:{{.Cli.ConsolePort}}</a>
+		</div>
+	</div>
 
-<p> just some text here! </P>
-<p>Server address: {{.Cli.OwnAddr}}</p>
-<p>Console Port: {{.ConsolePort}}</p>
-<p></p>
-<p>Connections established:</p>
-<ul>
-	{{range .Cli.Peers}}
-		<li>     {{.Addr}}    </li>>
-	{{end}}
-</ul>
+	<div class="row">
+        <div class="col-xs-3">
+			# of Message Received:{{.Svr.NumMsgReceived}} 
+		</div>
+		<div class="col-xs-9">
+			Last Message Received At:{{.Svr.LastMsgReceived}} 
+		</div>
+	</div>
 
-
+	
+	<div>
+		{{if .Cli.Peers}}
+			<h2>Peers:</h2>
+				{{range .Cli.Peers}}
+					<h3>      			
+						<a href="http://{{.Hostname}}:{{.ConsolePort}}/message"> {{.Addr}} </a>
+					</h3> 
+					{{if .NumMsgSent}}
+						<h4> Message Sent: {{.NumMsgSent}}</h4>
+						<h4>Last sent: </h4>
+						<ul>
+							<li># of msg: {{.NumMsgSentLast}}</li>
+							<li>Sent at: {{.LastMsgSentAt}}</li>
+							<li>Duration: {{.LastSentDuration}}</li>
+							{{if .LastRpcErr}}
+								<li>Error: {{.LastRpcErr}}</li>
+							{{end}}
+							
+						</ul>
+					{{end}}
+				{{end}}
+		{{else}}
+			<p>No peer connections</p>
+		{{end}}
+  	</div>
+</div>

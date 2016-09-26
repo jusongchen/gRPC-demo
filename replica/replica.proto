@@ -24,7 +24,7 @@ message DataChgSummary {
   // The number of record received.
   int64 record_count = 1; 
   // The duration of the traversal in seconds.
-  int32 elapsed_time = 2;
+  uint64 elapsed_time = 2;
 }
 
 
@@ -56,11 +56,15 @@ message NodeQryRequest {
   string NodeAddr  =1;
 }
 
-
-message NodeQryResponse {
-  repeated string NodeAddr  =1;
+message Node {
+  string hostname = 1;
+  int32 RPCPort = 2;
+  int32 ConsolePort = 3;
 }
 
+message NodeQryResponse {
+  repeated Node Nodes  =1;
+}
 
 
 // A PingRequest specifies the string to echo in response.

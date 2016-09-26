@@ -53,8 +53,9 @@ func main() {
 
 	go handleSignals()
 
-	client := cli.NewClient(*joinTo, *serverPort, *consolePort)
-	var server *svr.Server
+	client := cli.NewClient(*joinTo, int32(*serverPort), int32(*consolePort))
+	// var server *svr.Server
+	server := svr.NewServer(client)
 
 	go func() {
 		//launch the server goroutine
@@ -66,12 +67,10 @@ func main() {
 		g := grpc.NewServer()
 
 		// s := &svr.Server{c: &client}
-		server = svr.NewServer(client)
 
 		pb.RegisterSyncUpServer(g, server)
 		log.Printf("Starting server, RPC port %d, console port %d ...", *serverPort, *consolePort)
 		g.Serve(lis)
 	}()
-
-	log.Fatal(console.Start(*consolePort, client, server))
+	log.Fatal(console.Start(client, server))
 }
