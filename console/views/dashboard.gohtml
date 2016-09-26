@@ -1,0 +1,13 @@
+
+<p> just some text here! </P>
+<p>Server address: {{.Cli.OwnAddr}}</p>
+<p>Console Port: {{.ConsolePort}}</p>
+<p></p>
+<p>Connections established:</p>
+<ul>
+	{{range .Cli.Peers}}
+		<li>     {{.Addr}}    </li>>
+	{{end}}
+</ul>
+
+

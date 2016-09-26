@@ -26,8 +26,7 @@ type Peer struct {
 
 //Client not exported
 type Client struct {
-	OwnAddr     string
-	ConsolePort int
+	OwnAddr string
 	//set to true after connected to any peers
 	Connected   bool
 	Peers       []Peer
@@ -179,8 +178,8 @@ func NewClient(joinTo string, serverPort, consolePort int) *Client {
 	hostname, _ := os.Hostname()
 
 	c := Client{
-		OwnAddr:     fmt.Sprintf("%s:%d", hostname, serverPort),
-		ConsolePort: consolePort,
+		OwnAddr: fmt.Sprintf("%s:%d", hostname, serverPort),
+		// ConsolePort: consolePort,
 	}
 	//launch the client go rountine
 	go func() {
@@ -266,9 +265,4 @@ func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 			r.RecordCount, p.Addr, r.ElapsedTime, float64(r.RecordCount)/float64(r.ElapsedTime))
 	}
 	return nil
-}
-
-//Run starts console and wait user input
-func (c *Client) Run() error {
-	return c.openConsole()
 }

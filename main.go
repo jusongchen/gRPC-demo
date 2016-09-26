@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/jusongchen/gRPC-demo/cli"
+	"github.com/jusongchen/gRPC-demo/console"
 	pb "github.com/jusongchen/gRPC-demo/replica"
 	"github.com/jusongchen/gRPC-demo/svr"
 )
@@ -53,6 +54,7 @@ func main() {
 	go handleSignals()
 
 	client := cli.NewClient(*joinTo, *serverPort, *consolePort)
+	var server *svr.Server
 
 	go func() {
 		//launch the server goroutine
@@ -64,12 +66,18 @@ func main() {
 		g := grpc.NewServer()
 
 		// s := &svr.Server{c: &client}
-		s := svr.NewServer(client)
+		server = svr.NewServer(client)
 
-		pb.RegisterSyncUpServer(g, s)
+		pb.RegisterSyncUpServer(g, server)
 		log.Printf("Starting server, RPC port %d, console port %d ...", *serverPort, *consolePort)
 		g.Serve(lis)
 	}()
 
-	log.Fatal(client.Run())
+	log.Fatal(console.Start(*consolePort, client, server))
 }
+
+// console := console.Console{
+// 	ConsolePort: *consolePort,
+// 	Cli:         client,
+// 	Svr:         server,
+// }

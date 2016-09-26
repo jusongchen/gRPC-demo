@@ -1,5 +1,5 @@
-//Package cli get user input and broacast to all other peers
-package cli
+//Package console get user input and broacast to all other peers
+package console
 
 import (
 	"fmt"
@@ -9,22 +9,36 @@ import (
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/jusongchen/gRPC-demo/cli/views"
+	"github.com/jusongchen/gRPC-demo/cli"
+	"github.com/jusongchen/gRPC-demo/console/views"
 	pb "github.com/jusongchen/gRPC-demo/replica"
+	"github.com/jusongchen/gRPC-demo/svr"
 	"github.com/pkg/errors"
 )
+
+//Console is not exported
+type Console struct {
+	ConsolePort int
+	Cli         *cli.Client
+	Svr         *svr.Server
+}
 
 var (
 	index, contact, msg *views.View
 	dashboard           *template.Template
-	client              *Client
-
-	viewsDir = "cli/views/"
+	console             Console
+	viewsDir            = "console/views/"
 )
 
 //Start starts an http Server
-func (c *Client) openConsole() error {
-	client = c
+func Start(consolePort int, client *cli.Client, server *svr.Server) error {
+
+	console = Console{
+		ConsolePort: consolePort,
+		Cli:         client,
+		Svr:         server,
+	}
+
 	index = views.NewView("bootstrap", viewsDir+"index.gohtml")
 	contact = views.NewView("bootstrap", viewsDir+"contacts.gohtml")
 	msg = views.NewView("bootstrap", viewsDir+"message.gohtml")
@@ -42,7 +56,7 @@ func (c *Client) openConsole() error {
 
 	router.GET("/dashboard", dashboardHandler)
 
-	return http.ListenAndServe(fmt.Sprintf(":%d", c.ConsolePort), router)
+	return http.ListenAndServe(fmt.Sprintf(":%d", console.ConsolePort), router)
 
 }
 
@@ -75,7 +89,7 @@ func msgHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 			Message: r.FormValue("message"),
 		})
 
-		err = client.PromoteDataChange(records)
+		err = console.Cli.PromoteDataChange(records)
 		if err != nil {
 			fmt.Fprintf(w, "%v", err)
 		} else {
@@ -88,9 +102,16 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Param
 	// log.Printf("dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)")
 
 	// dashboard.ExecuteTemplate(os.Stdout, "dashboard.gohtml", client)
-	if err := dashboard.ExecuteTemplate(w, "dashboard.gohtml", client); err != nil {
+	if err := dashboard.ExecuteTemplate(w, "dashboard.gohtml", console); err != nil {
 		log.Fatal(errors.Wrap(err, "dashboardHandler"))
 	}
 	// fmt.Fprintf(w, "%v", client)
 
 }
+
+// func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+// 	if err := dashboard.ExecuteTemplate(w, "dashboard.gohtml", stat); err != nil {
+// 		log.Fatal(errors.Wrap(err, "dashboardHandler"))
+// 	}
+
+// }
