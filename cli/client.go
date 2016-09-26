@@ -27,15 +27,23 @@ type Peer struct {
 //Client not exported
 type Client struct {
 	OwnAddr     string
-	consolePort int
+	ConsolePort int
 	//set to true after connected to any peers
-	Connected bool
-	Peers     []Peer
+	Connected   bool
+	Peers       []Peer
+	NumMsgSent  int
+	LastMsgSent time.Time
 }
 
 // Server  not exported
-type Server struct {
-	c *Client
+// type Server struct {
+// 	c *Client
+// }
+
+type InstanceStat struct {
+	*Client
+	nMsgReceived    int
+	lastMsgReceived time.Time
 }
 
 type nodeChgResult struct {
@@ -172,7 +180,7 @@ func NewClient(joinTo string, serverPort, consolePort int) *Client {
 
 	c := Client{
 		OwnAddr:     fmt.Sprintf("%s:%d", hostname, serverPort),
-		consolePort: consolePort,
+		ConsolePort: consolePort,
 	}
 	//launch the client go rountine
 	go func() {

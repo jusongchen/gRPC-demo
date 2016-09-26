@@ -16,7 +16,9 @@ import (
 
 // Server  not exported
 type Server struct {
-	c *cli.Client
+	c               *cli.Client
+	NumMsgReceived  int
+	LastMsgReceived time.Time
 }
 
 //NodeChange not exported

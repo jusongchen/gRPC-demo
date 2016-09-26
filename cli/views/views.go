@@ -2,8 +2,11 @@ package views
 
 import (
 	"html/template"
+	"log"
 	"net/http"
 	"path/filepath"
+
+	"github.com/pkg/errors"
 )
 
 type View struct {
@@ -36,7 +39,12 @@ func (v *View) Render(w http.ResponseWriter, data interface{}) error {
 		Flashes: flashes(),
 		Data:    data,
 	}
-	return v.Template.ExecuteTemplate(w, v.Layout, vd)
+	err := v.Template.ExecuteTemplate(w, v.Layout, vd)
+	if err != nil {
+		log.Fatal(errors.Wrapf(err, "View.Render:%s", v.Template.Name()))
+	}
+	return nil
+
 }
 
 func layoutFiles() []string {

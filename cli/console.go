@@ -3,18 +3,23 @@ package cli
 
 import (
 	"fmt"
+	"html/template"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/jusongchen/gRPC-demo/cli/views"
 	pb "github.com/jusongchen/gRPC-demo/replica"
+	"github.com/pkg/errors"
 )
 
 var (
-	index, contact, msg, dashboard *views.View
-	client                         *Client
-	viewsDir                       = "cli/views/"
+	index, contact, msg *views.View
+	dashboard           *template.Template
+	client              *Client
+
+	viewsDir = "cli/views/"
 )
 
 //Start starts an http Server
@@ -23,7 +28,11 @@ func (c *Client) openConsole() error {
 	index = views.NewView("bootstrap", viewsDir+"index.gohtml")
 	contact = views.NewView("bootstrap", viewsDir+"contacts.gohtml")
 	msg = views.NewView("bootstrap", viewsDir+"message.gohtml")
-	// dashboard = views.NewView("bootstrap", viewsDir+"dashboard.gohtml")
+	var err error
+	dashboard, err = template.ParseFiles(viewsDir + "dashboard.gohtml")
+	if err != nil {
+		log.Fatal(errors.Wrapf(err, "template.ParseFiles(%s)", viewsDir+"dashboard.gohtml"))
+	}
 
 	router := httprouter.New()
 	router.GET("/", indexHandler)
@@ -33,7 +42,7 @@ func (c *Client) openConsole() error {
 
 	router.GET("/dashboard", dashboardHandler)
 
-	return http.ListenAndServe(fmt.Sprintf(":%d", c.consolePort), router)
+	return http.ListenAndServe(fmt.Sprintf(":%d", c.ConsolePort), router)
 
 }
 
@@ -76,7 +85,12 @@ func msgHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 }
 
 func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	// dashboard.Render(w, client)
-	fmt.Fprintf(w, "%v", client)
+	// log.Printf("dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)")
+
+	// dashboard.ExecuteTemplate(os.Stdout, "dashboard.gohtml", client)
+	if err := dashboard.ExecuteTemplate(w, "dashboard.gohtml", client); err != nil {
+		log.Fatal(errors.Wrap(err, "dashboardHandler"))
+	}
+	// fmt.Fprintf(w, "%v", client)
 
 }
