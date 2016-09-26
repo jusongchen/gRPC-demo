@@ -2,13 +2,13 @@
   <!-- <div class="jumbotron"> -->
    <div class="row">
         <div class="col-xs-6">
-			<p>Hostname: {{.Cli.Hostname}}</p>	
+			<p>Hostname: {{.Cli.Node.Hostname}}</p>	
 		</div>
         <div class="col-xs-3">
-			<p>RPC Port: {{.Cli.RPCPort}} </p>	
+			<p>RPC Port: {{.Cli.Node.RPCPort}} </p>	
 		</div>
 		<div class="col-xs-3">
-			Console Port:{{.Cli.ConsolePort}}</a>
+			Console Port:{{.Cli.Node.ConsolePort}}</a>
 		</div>
 	</div>
 
@@ -27,7 +27,7 @@
 			<h2>Peers:</h2>
 				{{range .Cli.Peers}}
 					<h3>      			
-						<a href="http://{{.Hostname}}:{{.ConsolePort}}/message"> {{.Addr}} </a>
+						<a href="http://{{.Node.Hostname}}:{{.Node.ConsolePort}}/message"> {{.Addr}} </a>
 					</h3> 
 					{{if .NumMsgSent}}
 						<h4> Message Sent: {{.NumMsgSent}}</h4>

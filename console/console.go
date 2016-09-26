@@ -56,7 +56,7 @@ func Start(client *cli.Client, server *svr.Server) error {
 
 	router.GET("/dashboard", dashboardHandler)
 
-	return http.ListenAndServe(fmt.Sprintf(":%d", client.ConsolePort), router)
+	return http.ListenAndServe(fmt.Sprintf(":%d", client.Node.ConsolePort), router)
 
 }
 

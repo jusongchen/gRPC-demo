@@ -19,10 +19,8 @@ import (
 
 //Peer not exported
 type Peer struct {
-	Hostname         string
-	RPCPort          int32
+	Node             pb.Node
 	Addr             string
-	ConsolePort      int32
 	RpcClient        pb.SyncUpClient
 	in               chan *pb.ChatMsg
 	LastRpcErr       error
@@ -34,12 +32,10 @@ type Peer struct {
 
 //Client not exported
 type Client struct {
-	Hostname string
-	RPCPort  int32
+	Node pb.Node
 	//set to true after connected to any peers
-	Connected   bool
-	Peers       []Peer
-	ConsolePort int32
+	Connected bool
+	Peers     []Peer
 }
 
 // Server  not exported
@@ -77,7 +73,7 @@ func (c *Client) NodeChange(ctx context.Context, req *pb.NodeChgRequest, opts ..
 		// res []*pb.NodeChgResponse
 		r := <-ch
 		if r.err != nil {
-			log.Printf("From client %s:%d: %s", c.Peers[i].Hostname, c.Peers[i].RPCPort, r.err.Error())
+			log.Printf("From client %v: %s", c.Peers[i].Node, r.err.Error())
 			err = r.err
 		}
 	}
@@ -105,22 +101,22 @@ func (c *Client) connToPeers(hostname string, RPCPort int32) error {
 	if hostname == "" {
 		return nil
 	}
-	//add first peer
+	//add first peer, we do not know the console port yet. Once we get all peer list, console port will be updated
 	n := pb.Node{
 		Hostname:    hostname,
 		RPCPort:     RPCPort,
 		ConsolePort: 0,
 	}
 
-	if err := c.AddPeer(&n); err != nil {
+	if err := c.AddPeer(n); err != nil {
 		return errors.Wrapf(err, "JoinCluster addPeer %v fail", n)
 	}
 
 	ctx := context.Background()
 
 	//making a Node Join request
-	addr := fmt.Sprintf("%s:%d", c.Hostname, c.RPCPort)
-	req := &pb.NodeChgRequest{Operation: pb.NodeChgRequest_JOIN, NodeAddr: addr}
+	// addr := fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
+	req := &pb.NodeChgRequest{Operation: pb.NodeChgRequest_JOIN, Node: &c.Node}
 
 	err := c.NodeChange(ctx, req)
 	if err != nil {
@@ -137,8 +133,8 @@ func (c *Client) QueryAndAddPeers() error {
 	ctx := context.Background()
 
 	//making a Node Query Request to get a list of nodes from the peer this node joined to
-
-	req := &pb.NodeQryRequest{NodeAddr: fmt.Sprintf("%s:%d", c.Hostname, c.RPCPort)}
+	// fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
+	req := &pb.NodeQryRequest{ScrNode: &c.Node}
 	res, err := c.NodeQuery(ctx, req)
 	if err != nil {
 		errors.Wrap(err, "gRPC NodeQuery fail")
@@ -147,11 +143,12 @@ func (c *Client) QueryAndAddPeers() error {
 
 	//for each addresses, add them as peer
 	for _, n := range res.Nodes {
-		// rpcAddr := fmt.Sprintf("%s:%d", c.Hostname, c.RPCPort)
-		if n.Hostname == c.Hostname && n.RPCPort == c.RPCPort {
-			continue
-		}
-		errAdd := c.AddPeer(n)
+		// rpcAddr := fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
+		// no need to skip, add node will check if the node exists or not
+		// if n.Hostname == c.Node.Hostname && n.RPCPort == c.Node.RPCPort {
+		// 	continue
+		// }
+		errAdd := c.AddPeer(*n)
 		if errAdd != nil {
 			err = errAdd
 		}
@@ -160,27 +157,28 @@ func (c *Client) QueryAndAddPeers() error {
 	return err
 }
 
-func (c *Client) AddPeerByAddr(addr string) error {
+// func (c *Client) AddPeerByAddr(addr string) error {
 
-	port, _ := strconv.Atoi(strings.Split(addr, ":")[1])
+// 	port, _ := strconv.Atoi(strings.Split(addr, ":")[1])
 
-	n := pb.Node{
-		Hostname:    strings.Split(addr, ":")[0],
-		RPCPort:     int32(port),
-		ConsolePort: 0,
-	}
-	return c.AddPeer(&n)
-}
+// 	n := pb.Node{
+// 		Hostname:    strings.Split(addr, ":")[0],
+// 		RPCPort:     int32(port),
+// 		ConsolePort: 0,
+// 	}
+// 	return c.AddPeer(&n)
+// }
 
-func (c *Client) AddPeer(n *pb.Node) error {
+func (c *Client) AddPeer(n pb.Node) error {
 	//check if it is this server, skip
-	// rpcAddr := fmt.Sprintf("%s:%d", c.Hostname, c.RPCPort)
-	if c.Hostname == n.Hostname && c.RPCPort == n.RPCPort {
+	// rpcAddr := fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
+	if c.Node.Hostname == n.Hostname && c.Node.RPCPort == n.RPCPort {
 		return nil
 	}
-	//check if client has already registered
-	for _, v := range c.Peers {
-		if v.Hostname == n.Hostname && v.RPCPort == n.RPCPort {
+	//check if client has already registered, change Console port
+	for i, v := range c.Peers {
+		if v.Node.Hostname == n.Hostname && v.Node.RPCPort == n.RPCPort {
+			c.Peers[i].Node.ConsolePort = v.Node.ConsolePort
 			return nil
 		}
 	}
@@ -193,18 +191,19 @@ func (c *Client) AddPeer(n *pb.Node) error {
 	// c.inCluster = true
 
 	peer := Peer{
-		Hostname:    n.Hostname,
-		RPCPort:     n.RPCPort,
-		ConsolePort: n.ConsolePort,
-		RpcClient:   pb.NewSyncUpClient(conn),
-		in:          make(chan *pb.ChatMsg),
+		Node: n,
+		// Hostname:    n.Hostname,
+		// RPCPort:     n.RPCPort,
+		// ConsolePort: n.ConsolePort,
+		RpcClient: pb.NewSyncUpClient(conn),
+		in:        make(chan *pb.ChatMsg),
 	}
-	peer.Addr = fmt.Sprintf("%s:%d", peer.Hostname, peer.RPCPort)
+	peer.Addr = fmt.Sprintf("%s:%d", peer.Node.Hostname, peer.Node.RPCPort)
 	c.Peers = append(c.Peers, peer)
 	c.Connected = true
-	// log.Printf("Server %s: peer update:", c.RPCPort)
+	// log.Printf("Server %s: peer update:", c.Node.RPCPort)
 	for i := range c.Peers {
-		log.Printf("Connect to peer %s:%d", c.Peers[i].Hostname, c.Peers[i].RPCPort)
+		log.Printf("Connect to peer %v", c.Peers[i].Node)
 	}
 	return nil
 }
@@ -215,9 +214,11 @@ func NewClient(joinTo string, serverPort, consolePort int32) *Client {
 	hostname, _ := os.Hostname()
 
 	c := Client{
-		RPCPort:     serverPort,
-		Hostname:    hostname,
-		ConsolePort: consolePort,
+		Node: pb.Node{
+			RPCPort:     serverPort,
+			Hostname:    hostname,
+			ConsolePort: consolePort,
+		},
 	}
 	//launch the client go rountine
 	go func() {

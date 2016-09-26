@@ -28,6 +28,13 @@ message DataChgSummary {
 }
 
 
+message Node {
+  string Hostname = 1;
+  int32 RPCPort = 2;
+  int32 ConsolePort = 3;
+}
+
+
 message NodeChgRequest {
   enum Operations {
     UNKNOWN=0;
@@ -41,7 +48,7 @@ message NodeChgRequest {
     DROP  = 4;
   }
   Operations operation =1; 
-  string NodeAddr  =2;
+  Node node  =2;
 }
 
 
@@ -53,13 +60,7 @@ message NodeChgResponse{
 
 
 message NodeQryRequest {
-  string NodeAddr  =1;
-}
-
-message Node {
-  string hostname = 1;
-  int32 RPCPort = 2;
-  int32 ConsolePort = 3;
+  Node scrNode  =1;
 }
 
 message NodeQryResponse {
