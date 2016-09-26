@@ -75,9 +75,3 @@ func main() {
 
 	log.Fatal(console.Start(*consolePort, client, server))
 }
-
-// console := console.Console{
-// 	ConsolePort: *consolePort,
-// 	Cli:         client,
-// 	Svr:         server,
-// }
