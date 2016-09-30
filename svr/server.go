@@ -31,7 +31,7 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 		s.c.NodeChange(ctx, &pb.NodeChgRequest{Operation: pb.NodeChgRequest_ADD, Node: req.Node})
 
 		//add this new node as peer
-		if err := s.c.AddPeer(*req.Node); err != nil {
+		if err := s.c.AddPeer(req.Node); err != nil {
 			return &pb.NodeChgResponse{Fail: true}, errors.Wrap(err, "Server:NodeChgJoin:AddPeer fail")
 		}
 		return &pb.NodeChgResponse{Fail: false}, nil
@@ -41,7 +41,7 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 
 		// log.Printf("get NodeChgRequest:AddNode:%s", req.NodeAddr)
 		//add this new node as peer
-		if err := s.c.AddPeer(*req.Node); err != nil {
+		if err := s.c.AddPeer(req.Node); err != nil {
 			resp := pb.NodeChgResponse{Fail: true,
 				ErrMsg: fmt.Sprintf("Server.NodeChange:AddPeer %v failed", *req.Node),
 			}
@@ -61,12 +61,15 @@ func (s *Server) NodeQuery(ctx context.Context, req *pb.NodeQryRequest) (*pb.Nod
 	// rpcAddr := fmt.Sprintf("%s:%d", s.c.Hostname, s.c.RPCPort)
 
 	//return this server's own address as well
-	nodes := []*pb.Node{&s.c.Node}
+	nodes := append([]*pb.Node{}, &s.c.Node)
 
 	// nodes = append(nodes, &n)
-	for _, p := range s.c.Peers {
-		nodes = append(nodes, &p.Node)
+	for i := range s.c.Peers {
+		nodes = append(nodes, &s.c.Peers[i].Node)
 	}
+	// for i := range nodes {
+	// 	log.Printf("Server %v return peers %#v\n", s.c.Node, *nodes[i])
+	// }
 
 	return &pb.NodeQryResponse{Nodes: nodes}, nil
 }

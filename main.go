@@ -9,8 +9,11 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -18,6 +21,7 @@ import (
 	"github.com/jusongchen/gRPC-demo/console"
 	pb "github.com/jusongchen/gRPC-demo/replica"
 	"github.com/jusongchen/gRPC-demo/svr"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -53,7 +57,7 @@ func main() {
 
 	go handleSignals()
 
-	client := cli.NewClient(*joinTo, int32(*serverPort), int32(*consolePort))
+	client := cli.NewClient(int32(*serverPort), int32(*consolePort))
 	// var server *svr.Server
 	server := svr.NewServer(client)
 
@@ -63,14 +67,27 @@ func main() {
 		if err != nil {
 			log.Fatalf("\nfailed to listen: %v", err)
 		}
-
 		g := grpc.NewServer()
-
-		// s := &svr.Server{c: &client}
-
 		pb.RegisterSyncUpServer(g, server)
+
 		log.Printf("Starting server, RPC port %d, console port %d ...", *serverPort, *consolePort)
 		g.Serve(lis)
 	}()
+
+	var joinToNode *pb.Node
+	//first node has jointTo as empty string
+	if *joinTo != "" {
+		RPCPort, err := strconv.Atoi(strings.Split(*joinTo, ":")[1])
+		if err != nil {
+			log.Fatal(errors.Wrapf(err, "joinTo not a valid address:%s", *joinTo))
+		}
+		joinToNode = &pb.Node{
+			Hostname: strings.Split(*joinTo, ":")[0],
+			RPCPort:  int32(RPCPort),
+		}
+	}
+	//need to wait for server to start up first
+	time.Sleep(time.Millisecond * 100)
+	client.ConnToPeers(joinToNode)
 	log.Fatal(console.Start(client, server))
 }
