@@ -1,0 +1,47 @@
+<div class="container jumbotron">
+	<div  class="row">
+		{{if .Cli.Peers}}
+
+		<h4> Message Sent:</h4>
+			<table class="table table-hover">
+				<thead>
+					<tr>
+					<th>To Peer</th>
+					<th>In Total</th>
+					<th>Last Sent At</th>
+					<th>Last Sent Duration</th>
+					</tr>
+				</thead>
+				<tbody>
+					{{range .Cli.Peers}}
+						<tr>
+						<th><a href="http://{{.Node.Hostname}}:{{.Node.ConsolePort}}/message"> {{.Addr}} </a></th>
+						<th>{{.NumMsgSent}}</th>
+						<th>{{if .NumMsgSent }} {{.LastMsgSentAt}} {{end}}</th>
+						<th>{{with .LastSentDuration}} {{.}} {{end}}</th>
+						</tr>
+					{{end}}
+				</tbody>
+			</table>
+		{{else}}
+			<h2>No peer connections</h2>
+		{{end}}
+
+		<p><p>
+		<h4>Message Received</h4>
+	    <table class="table table-hover">
+	        <thead>
+	            <tr>
+	            <th>In Total </th>
+	            <th>Last At</th>
+	            </tr>
+	        </thead>
+	        <tbody>
+	            <tr>
+	            <th>{{.Svr.NumMsgReceived}} </th>
+	            <th>{{if .Svr.NumMsgReceived}} {{.Svr.LastMsgReceivedAt}} {{end}} </th>
+	            </tr>
+	        </tbody>
+	    </table>
+	</div>
+</div>

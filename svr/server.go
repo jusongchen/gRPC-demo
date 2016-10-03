@@ -1,11 +1,11 @@
-// TDatahe svr command runs a syncUp Server that promote changes and handle changes to/from multiple peers.
+//Package svr handles gRPC requests from peers
 package svr
 
 import (
 	"fmt"
 	"io"
 	"log"
-	_ "net/http/pprof"
+	// _ "net/http/pprof"
 	"time"
 
 	"github.com/jusongchen/gRPC-demo/cli"
@@ -16,7 +16,9 @@ import (
 
 // Server  not exported
 type Server struct {
-	c *cli.Client
+	c                 *cli.Client
+	NumMsgReceived    int64
+	LastMsgReceivedAt time.Time
 }
 
 //NodeChange not exported
@@ -26,10 +28,10 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 	switch req.Operation {
 	case pb.NodeChgRequest_JOIN:
 		//notify all clients to add Node
-		s.c.NodeChange(ctx, &pb.NodeChgRequest{Operation: pb.NodeChgRequest_ADD, NodeAddr: req.NodeAddr})
+		s.c.NodeChange(ctx, &pb.NodeChgRequest{Operation: pb.NodeChgRequest_ADD, Node: req.Node})
 
 		//add this new node as peer
-		if err := s.c.AddPeer(req.NodeAddr); err != nil {
+		if err := s.c.AddPeer(req.Node); err != nil {
 			return &pb.NodeChgResponse{Fail: true}, errors.Wrap(err, "Server:NodeChgJoin:AddPeer fail")
 		}
 		return &pb.NodeChgResponse{Fail: false}, nil
@@ -39,13 +41,16 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 
 		// log.Printf("get NodeChgRequest:AddNode:%s", req.NodeAddr)
 		//add this new node as peer
-		if err := s.c.AddPeer(req.NodeAddr); err != nil {
-			return &pb.NodeChgResponse{Fail: true}, errors.Wrapf(err, "Server:NodeChgAdd:AddPeer %s fail", req.NodeAddr)
+		if err := s.c.AddPeer(req.Node); err != nil {
+			resp := pb.NodeChgResponse{Fail: true,
+				ErrMsg: fmt.Sprintf("Server.NodeChange:AddPeer %v failed", *req.Node),
+			}
+			return &resp, errors.Wrap(err, "Server:NodeChgJoin:AddPeer fail")
 		}
 		return &pb.NodeChgResponse{Fail: false}, nil
 
 	default:
-		log.Fatal("Server NodeChange:unknown Operation %v", req.Operation)
+		log.Fatalf("Server NodeChange:unknown Operation %v", req.Operation)
 	}
 
 	return &pb.NodeChgResponse{}, nil
@@ -53,14 +58,20 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 
 func (s *Server) NodeQuery(ctx context.Context, req *pb.NodeQryRequest) (*pb.NodeQryResponse, error) {
 	// fmt.Printf("\nServer get Node query request:%#v\n", req)
+	// rpcAddr := fmt.Sprintf("%s:%d", s.c.Hostname, s.c.RPCPort)
 
-	//return server's own address as well
-	addrs := []string{s.c.OwnAddr}
-	for _, p := range s.c.Peers {
-		addrs = append(addrs, p.Addr)
+	//return this server's own address as well
+	nodes := append([]*pb.Node{}, &s.c.Node)
+
+	// nodes = append(nodes, &n)
+	for i := range s.c.Peers {
+		nodes = append(nodes, &s.c.Peers[i].Node)
 	}
+	// for i := range nodes {
+	// 	log.Printf("Server %v return peers %#v\n", s.c.Node, *nodes[i])
+	// }
 
-	return &pb.NodeQryResponse{NodeAddr: addrs}, nil
+	return &pb.NodeQryResponse{Nodes: nodes}, nil
 }
 
 func (s *Server) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
@@ -71,17 +82,20 @@ func (s *Server) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingRespons
 func (s *Server) DataChange(stream pb.SyncUp_DataChangeServer) error {
 
 	var rowCount int64
-
+	defer func() {
+		s.NumMsgReceived += rowCount
+		s.LastMsgReceivedAt = time.Now()
+	}()
 	startTime := time.Now()
 	for {
 		record, err := stream.Recv()
 
 		if err == io.EOF {
 			endTime := time.Now()
-			log.Printf("Server %s received %d records and sync'ed them to DB.", s.c.OwnAddr, rowCount)
+			log.Printf("Server %v received %d records and sync'ed them to DB.", s.c.Node, rowCount)
 			return stream.SendAndClose(&pb.DataChgSummary{
 				RecordCount: rowCount,
-				ElapsedTime: int32(endTime.Sub(startTime).Seconds()),
+				ElapsedTime: uint64(endTime.Sub(startTime)),
 			})
 		}
 		if err != nil {

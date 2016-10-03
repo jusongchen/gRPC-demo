@@ -17,25 +17,22 @@ import (
 
 //Peer not exported
 type Peer struct {
-	Addr string
-	// lastAliveTime time.Time
-	RpcClient  pb.SyncUpClient
-	in         chan *pb.ChatMsg
-	lastRpcErr error
+	Node             pb.Node
+	Addr             string
+	RpcClient        pb.SyncUpClient
+	in               chan *pb.ChatMsg
+	LastRpcErr       error
+	NumMsgSent       int64
+	LastMsgSentAt    time.Time
+	NumMsgSentLast   int64
+	LastSentDuration time.Duration
 }
 
 //Client not exported
 type Client struct {
-	OwnAddr     string
-	consolePort int
-	//set to true after connected to any peers
-	Connected bool
-	Peers     []Peer
-}
-
-// Server  not exported
-type Server struct {
-	c *Client
+	Node          pb.Node
+	LastMsgSentAt time.Time
+	Peers         []Peer
 }
 
 type nodeChgResult struct {
@@ -62,7 +59,7 @@ func (c *Client) NodeChange(ctx context.Context, req *pb.NodeChgRequest, opts ..
 		// res []*pb.NodeChgResponse
 		r := <-ch
 		if r.err != nil {
-			log.Printf("From client%s:%s", c.Peers[i].Addr, r.err.Error())
+			log.Printf("From client %v: %s", c.Peers[i].Node, r.err.Error())
 			err = r.err
 		}
 	}
@@ -70,13 +67,15 @@ func (c *Client) NodeChange(ctx context.Context, req *pb.NodeChgRequest, opts ..
 	// return &pb.NodeChgResponse{Success:true}, nil
 }
 
-func (c *Client) NodeQuery(ctx context.Context, req *pb.NodeQryRequest, opts ...grpc.CallOption) (*pb.NodeQryResponse, error) {
+func (c *Client) nodeQuery(ctx context.Context, req *pb.NodeQryRequest, opts ...grpc.CallOption) (*pb.NodeQryResponse, error) {
+
 	//[TODO] simplified version, only query the first peer
 	res, err := c.Peers[0].RpcClient.NodeQuery(ctx, req)
 	if err != nil {
 		return &pb.NodeQryResponse{}, err
 	}
-	return &pb.NodeQryResponse{NodeAddr: res.NodeAddr}, nil
+
+	return &pb.NodeQryResponse{Nodes: res.Nodes}, nil
 }
 
 //Ping not exported
@@ -84,20 +83,22 @@ func (c *Client) Ping(ctx context.Context, req *pb.PingRequest, opts ...grpc.Cal
 	return nil, nil
 }
 
-func (c *Client) connToPeers(AddrToJoin string) error {
+func (c *Client) ConnToPeers(joinTo *pb.Node) error {
 	//first node
-	if AddrToJoin == "" {
+	if joinTo == nil {
 		return nil
 	}
-	//add first peer
-	if err := c.AddPeer(AddrToJoin); err != nil {
-		return errors.Wrapf(err, "JoinCluster addPeer %s fail", AddrToJoin)
+
+	//add first peer, we do not know the console port yet. Once we get all peer list, console port will be updated
+	if err := c.AddPeer(joinTo); err != nil {
+		return errors.Wrapf(err, "JoinCluster addPeer %v fail", joinTo)
 	}
 
 	ctx := context.Background()
 
 	//making a Node Join request
-	req := &pb.NodeChgRequest{Operation: pb.NodeChgRequest_JOIN, NodeAddr: c.OwnAddr}
+	// addr := fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
+	req := &pb.NodeChgRequest{Operation: pb.NodeChgRequest_JOIN, Node: &c.Node}
 
 	err := c.NodeChange(ctx, req)
 	if err != nil {
@@ -105,28 +106,26 @@ func (c *Client) connToPeers(AddrToJoin string) error {
 		return err
 	}
 
-	return c.QueryAndAddPeers()
-
+	return c.queryAndAddPeers(joinTo)
 }
 
-func (c *Client) QueryAndAddPeers() error {
+func (c *Client) queryAndAddPeers(joinTo *pb.Node) error {
 
 	ctx := context.Background()
 
 	//making a Node Query Request to get a list of nodes from the peer this node joined to
-	req := &pb.NodeQryRequest{NodeAddr: c.OwnAddr}
-	res, err := c.NodeQuery(ctx, req)
+	// fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
+	req := &pb.NodeQryRequest{ScrNode: joinTo}
+	res, err := c.nodeQuery(ctx, req)
 	if err != nil {
-		errors.Wrap(err, "gRPC NodeQuery fail")
+		errors.Wrapf(err, "QueryAndAddPeers:%v", c.Node)
 		return err
 	}
 
 	//for each addresses, add them as peer
-	for _, addr := range res.NodeAddr {
-		if addr == c.OwnAddr {
-			continue
-		}
-		errAdd := c.AddPeer(addr)
+	for _, n := range res.Nodes {
+		// log.Printf("%v:Get peers:%v\n", c.Node, n)
+		errAdd := c.AddPeer(n)
 		if errAdd != nil {
 			err = errAdd
 		}
@@ -135,18 +134,23 @@ func (c *Client) QueryAndAddPeers() error {
 	return err
 }
 
-func (c *Client) AddPeer(clientAddr string) error {
-	//check if it is this server, skip
-	if clientAddr == c.OwnAddr {
-		return nil
-	}
-	//check if client has already registered
-	for _, v := range c.Peers {
-		if v.Addr == clientAddr {
+func (c *Client) AddPeer(n *pb.Node) error {
+
+	//check if client has already registered, change Console port
+	for i := range c.Peers {
+		node := &c.Peers[i].Node
+		if node.Hostname == n.Hostname && node.RPCPort == n.RPCPort {
+			node.ConsolePort = n.ConsolePort
 			return nil
 		}
 	}
 
+	//do not add this node
+	if n.Hostname == c.Node.Hostname && n.RPCPort == c.Node.RPCPort {
+		return nil
+	}
+
+	clientAddr := fmt.Sprintf("%s:%d", n.Hostname, n.RPCPort)
 	conn, err := grpc.Dial(clientAddr, grpc.WithInsecure())
 	if err != nil {
 		return errors.Wrapf(err, "grpc.Dail to %s fail", clientAddr)
@@ -154,45 +158,45 @@ func (c *Client) AddPeer(clientAddr string) error {
 	// log.Printf("Connected to peer:%s\n", clientAddr)
 	// c.inCluster = true
 
-	peer := Peer{Addr: clientAddr, RpcClient: pb.NewSyncUpClient(conn), in: make(chan *pb.ChatMsg)}
-
+	peer := Peer{
+		Node:      *n,
+		RpcClient: pb.NewSyncUpClient(conn),
+		in:        make(chan *pb.ChatMsg),
+	}
+	peer.Addr = fmt.Sprintf("%s:%d", peer.Node.Hostname, peer.Node.RPCPort)
 	c.Peers = append(c.Peers, peer)
-	c.Connected = true
-	log.Printf("Server %s: peer update:", c.OwnAddr)
+	log.Printf("Server %v: peer update:", c.Node)
 	for i := range c.Peers {
-		log.Printf("Connect to peer %s", c.Peers[i].Addr)
+		log.Printf("Connect to peer %v", c.Peers[i].Node)
 	}
 	return nil
 }
 
 // NewClient creates a NewClient instance
-func NewClient(joinTo string, serverPort, consolePort int) *Client {
+func NewClient(serverPort, consolePort int32) *Client {
 
 	hostname, _ := os.Hostname()
 
 	c := Client{
-		OwnAddr:     fmt.Sprintf("%s:%d", hostname, serverPort),
-		consolePort: consolePort,
+		Node: pb.Node{
+			RPCPort:     serverPort,
+			Hostname:    hostname,
+			ConsolePort: consolePort,
+		},
 	}
-	//launch the client go rountine
-	go func() {
-		if err := c.connToPeers(joinTo); err != nil {
-			log.Fatal(err)
-		}
-	}()
+
 	return &c
 }
 
 //PromoteDataChange makes  RPC calls in parallel to the peers and get change status.
 func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 
-	if !c.Connected {
+	if len(c.Peers) == 0 {
 		return fmt.Errorf("Not connected to any peers.")
 	}
 	ctx := context.Background()
 
 	ch := make(chan *pb.DataChgSummary, len(c.Peers))
-
 	//replicate changes to peer channels
 	for i := range c.Peers {
 		c.Peers[i].in = make(chan *pb.ChatMsg)
@@ -211,11 +215,6 @@ func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 			close(c.Peers[i].in)
 		}
 	}()
-	// for r := range chRows {
-	// 	for i := range c.Peers {
-	// 		c.Peers[i].in <- r
-	// 	}
-	// }
 
 	for _, b := range c.Peers {
 
@@ -230,37 +229,41 @@ func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 
 			stream, err := client.DataChange(ctx)
 			if err != nil {
-				grpclog.Fatalf("%v.DataChange(_) = _, %v", client, err)
+				grpclog.Fatalf("%c.Peers[i].DataChange(_) = _, %v", client, err)
 			}
 
 			for row := range in {
 				if err := stream.Send(row); err != nil {
-					grpclog.Fatalf("%v.Send(%v) = %v", stream, *row, err)
+					grpclog.Fatalf("%c.Peers[i].Send(%v) = %v", stream, *row, err)
 				}
 			}
 
 			chgSummary, err := stream.CloseAndRecv()
 			if err != nil {
-				grpclog.Fatalf("%v.CloseAndRecv() got error %v, want %v", stream, err, nil)
+				grpclog.Fatalf("%c.Peers[i].CloseAndRecv() got error %v, want %v", stream, err, nil)
 			}
 			// grpclog.Printf("Change summary: %v", chgSummary)
 			endTime := time.Now()
 
-			chgSummary.ElapsedTime = int32(endTime.Sub(startTime).Seconds())
+			chgSummary.ElapsedTime = uint64(endTime.Sub(startTime))
 			ch <- chgSummary
 		}(b.RpcClient, b.in)
 	}
 
-	for _, p := range c.Peers {
+	lastMsgSentAt := time.Now()
+	for i := range c.Peers {
+		p := &c.Peers[i]
 		r := <-ch
-		log.Printf("\n")
-		log.Printf("%d rows sync'ed to server %s in %d seconds (process rate:%f rows/second).\n",
+		lastStatus := fmt.Sprintf("%v:%d rows sync'ed to server %s in %d seconds (process rate:%f rows/second).\n", time.Now(),
 			r.RecordCount, p.Addr, r.ElapsedTime, float64(r.RecordCount)/float64(r.ElapsedTime))
-	}
-	return nil
-}
+		log.Print(lastStatus)
 
-//Run starts console and wait user input
-func (c *Client) Run() error {
-	return c.openConsole()
+		p.LastMsgSentAt = lastMsgSentAt
+		p.NumMsgSentLast = r.RecordCount
+		p.LastSentDuration = time.Duration(r.ElapsedTime)
+		p.NumMsgSent += r.RecordCount
+
+	}
+	c.LastMsgSentAt = lastMsgSentAt
+	return nil
 }

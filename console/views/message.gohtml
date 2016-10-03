@@ -1,0 +1,94 @@
+{{define "yield"}}
+<!-- <h1>Thank you for reaching out!</h1> -->
+
+<div class="container">
+<!-- use bootstrap grid to stack to horizontal  -->
+    <div class="row">
+        <div class="col-xs-3 ">
+            <br/>
+            <h3>Post a Message </h3>  
+            <br/>
+            <form class="form-horizontal" action="/message" method="post">
+                <div class="form-group">
+              
+                <label for="userid">Your userid</label>
+                <input type="number" class="form-control" name="userid" min = "1", max="999999", placeholder="Enter your userid, a number between 1 and 999999">
+                </div>
+                <div class="form-group">
+                <label for="message">message</label>
+                <input type="textarea" class="form-control" name="message" placeholder="Enter your message here">
+                </div>
+                <input type="submit" class="btn btn-primary" />
+            </form>
+        </div>
+
+        <div  class="col-xs-8">
+            <h4>This Server:</h4>
+            <table class="table table-hover">
+                <thead>
+                </thead>
+                <tbody>
+                    <tr>
+                    <th>Hostname</th>
+                    <th>{{.Data.Cli.Node.Hostname}}</th>
+                    </tr>
+                    <tr>
+                    <th>RPC Port</th>
+                    <th>{{.Data.Cli.Node.RPCPort}}</th>
+                    </tr>
+                    <tr>
+                    <th>Console Port</th>
+                    <th>{{.Data.Cli.Node.ConsolePort}}</th>
+                    </tr>
+                </tbody>
+            </table>
+    
+            <div  id ="dashboard" >
+                <p></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- refresh the dashboard div automatically in 1000 ms-->
+<script src="http://code.jquery.com/jquery-latest.js"></script>
+<script>
+
+    var lastChangeTS , newChangeTS
+
+    lastChangeTS="";
+    newChangeTS="";
+
+    function isSrvUpdated() {
+        $.get("/server/last-update-TS",    function( data ,status) {
+            newChangeTS = data;
+            // console.log("Data: " + data + "\nnewChangeTS"+newChangeTS+"\nStatus: " + status);
+              
+        });
+
+        // console.log( "out of callback: newChangeTS:"+ newChangeTS );
+
+        if (lastChangeTS == newChangeTS) {
+            console.log ("no changes"+lastChangeTS+"  newChangeTS:"+newChangeTS);
+            return false;
+        }
+        // console.log ("Changes:"+lastChangeTS+"  newChangeTS:"+newChangeTS);
+        //New change detected
+        lastChangeTS = newChangeTS;
+        return true;
+    }
+
+$(document).ready(function(){
+        setInterval(function() {
+            if (isSrvUpdated() == false ) {
+                return;
+            }
+            console.log ("Changed from :"+lastChangeTS+"  to :"+newChangeTS);
+            <!-- GET /server/dashboard to replace div with id=dashboard -->
+            $("#dashboard").load("/server/dashboard").fadein("slow");
+        }, 100);
+    });
+
+</script>
+  
+{{end}}

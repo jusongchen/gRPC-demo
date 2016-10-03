@@ -1,0 +1,5 @@
+Notes:
+
+1) get Console port not right
+2) the 4th node join failed
+
