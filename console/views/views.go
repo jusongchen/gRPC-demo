@@ -34,9 +34,9 @@ func NewView(layout string, files ...string) *View {
 	}
 }
 
-func (v *View) Render(w http.ResponseWriter, data interface{}) error {
+func (v *View) Render(w http.ResponseWriter, data interface{}, flashes map[string]string) error {
 	vd := ViewData{
-		Flashes: flashes(),
+		Flashes: flashes,
 		Data:    data,
 	}
 	err := v.Template.ExecuteTemplate(w, v.Layout, vd)
@@ -53,16 +53,4 @@ func layoutFiles() []string {
 		panic(err)
 	}
 	return files
-}
-
-var flashRotator int = 0
-
-func flashes() map[string]string {
-	flashRotator = flashRotator + 1
-	if flashRotator%3 == 0 {
-		return map[string]string{
-			"warning": "You are about to exceed your plan limts!",
-		}
-	}
-	return map[string]string{}
 }

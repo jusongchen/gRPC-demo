@@ -30,10 +30,9 @@ type Peer struct {
 
 //Client not exported
 type Client struct {
-	Node pb.Node
-	//set to true after connected to any peers
-	Connected bool
-	Peers     []Peer
+	Node          pb.Node
+	LastMsgSentAt time.Time
+	Peers         []Peer
 }
 
 type nodeChgResult struct {
@@ -166,7 +165,6 @@ func (c *Client) AddPeer(n *pb.Node) error {
 	}
 	peer.Addr = fmt.Sprintf("%s:%d", peer.Node.Hostname, peer.Node.RPCPort)
 	c.Peers = append(c.Peers, peer)
-	c.Connected = true
 	log.Printf("Server %v: peer update:", c.Node)
 	for i := range c.Peers {
 		log.Printf("Connect to peer %v", c.Peers[i].Node)
@@ -193,7 +191,7 @@ func NewClient(serverPort, consolePort int32) *Client {
 //PromoteDataChange makes  RPC calls in parallel to the peers and get change status.
 func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 
-	if !c.Connected {
+	if len(c.Peers) == 0 {
 		return fmt.Errorf("Not connected to any peers.")
 	}
 	ctx := context.Background()
@@ -217,11 +215,6 @@ func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 			close(c.Peers[i].in)
 		}
 	}()
-	// for r := range chRows {
-	// 	for i := range c.Peers {
-	// 		c.Peers[i].in <- r
-	// 	}
-	// }
 
 	for _, b := range c.Peers {
 
@@ -257,6 +250,7 @@ func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 		}(b.RpcClient, b.in)
 	}
 
+	lastMsgSentAt := time.Now()
 	for i := range c.Peers {
 		p := &c.Peers[i]
 		r := <-ch
@@ -264,11 +258,12 @@ func (c *Client) PromoteDataChange(records []*pb.ChatMsg) error {
 			r.RecordCount, p.Addr, r.ElapsedTime, float64(r.RecordCount)/float64(r.ElapsedTime))
 		log.Print(lastStatus)
 
-		p.LastMsgSentAt = time.Now()
+		p.LastMsgSentAt = lastMsgSentAt
 		p.NumMsgSentLast = r.RecordCount
 		p.LastSentDuration = time.Duration(r.ElapsedTime)
 		p.NumMsgSent += r.RecordCount
 
 	}
+	c.LastMsgSentAt = lastMsgSentAt
 	return nil
 }

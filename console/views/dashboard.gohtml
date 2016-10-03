@@ -1,50 +1,47 @@
-<div class="container">  
-  <!-- <div class="jumbotron"> -->
-   <div class="row">
-        <div class="col-xs-6">
-			<p>Hostname: {{.Cli.Node.Hostname}}</p>	
-		</div>
-        <div class="col-xs-3">
-			<p>RPC Port: {{.Cli.Node.RPCPort}} </p>	
-		</div>
-		<div class="col-xs-3">
-			Console Port:{{.Cli.Node.ConsolePort}}</a>
-		</div>
-	</div>
-
-	<div class="row">
-        <div class="col-xs-3">
-			# of Message Received:{{.Svr.NumMsgReceived}} 
-		</div>
-		<div class="col-xs-9">
-			Last Message Received At:{{.Svr.LastMsgReceived}} 
-		</div>
-	</div>
-
-	
-	<div>
+<div class="container jumbotron">
+	<div  class="row">
 		{{if .Cli.Peers}}
-			<h2>Peers:</h2>
-				{{range .Cli.Peers}}
-					<h3>      			
-						<a href="http://{{.Node.Hostname}}:{{.Node.ConsolePort}}/message"> {{.Addr}} </a>
-					</h3> 
-					{{if .NumMsgSent}}
-						<h4> Message Sent: {{.NumMsgSent}}</h4>
-						<h4>Last sent: </h4>
-						<ul>
-							<li># of msg: {{.NumMsgSentLast}}</li>
-							<li>Sent at: {{.LastMsgSentAt}}</li>
-							<li>Duration: {{.LastSentDuration}}</li>
-							{{if .LastRpcErr}}
-								<li>Error: {{.LastRpcErr}}</li>
-							{{end}}
-							
-						</ul>
+
+		<h4> Message Sent:</h4>
+			<table class="table table-hover">
+				<thead>
+					<tr>
+					<th>To Peer</th>
+					<th>In Total</th>
+					<th>Last Sent At</th>
+					<th>Last Sent Duration</th>
+					</tr>
+				</thead>
+				<tbody>
+					{{range .Cli.Peers}}
+						<tr>
+						<th><a href="http://{{.Node.Hostname}}:{{.Node.ConsolePort}}/message"> {{.Addr}} </a></th>
+						<th>{{.NumMsgSent}}</th>
+						<th>{{if .NumMsgSent }} {{.LastMsgSentAt}} {{end}}</th>
+						<th>{{with .LastSentDuration}} {{.}} {{end}}</th>
+						</tr>
 					{{end}}
-				{{end}}
+				</tbody>
+			</table>
 		{{else}}
-			<p>No peer connections</p>
+			<h2>No peer connections</h2>
 		{{end}}
-  	</div>
+
+		<p><p>
+		<h4>Message Received</h4>
+	    <table class="table table-hover">
+	        <thead>
+	            <tr>
+	            <th>In Total </th>
+	            <th>Last At</th>
+	            </tr>
+	        </thead>
+	        <tbody>
+	            <tr>
+	            <th>{{.Svr.NumMsgReceived}} </th>
+	            <th>{{if .Svr.NumMsgReceived}} {{.Svr.LastMsgReceivedAt}} {{end}} </th>
+	            </tr>
+	        </tbody>
+	    </table>
+	</div>
 </div>

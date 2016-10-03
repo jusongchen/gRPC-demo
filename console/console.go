@@ -24,10 +24,11 @@ type Console struct {
 }
 
 var (
-	index, contact, msg *views.View
-	dashboard           *template.Template
-	console             Console
-	viewsDir            = "console/views/"
+	console Console
+
+	index, msg *views.View
+	dashboard  *template.Template
+	viewsDir   = "console/views/"
 )
 
 //Start starts an http Server
@@ -40,7 +41,6 @@ func Start(client *cli.Client, server *svr.Server) error {
 	}
 
 	index = views.NewView("bootstrap", viewsDir+"index.gohtml")
-	contact = views.NewView("bootstrap", viewsDir+"contacts.gohtml")
 	msg = views.NewView("bootstrap", viewsDir+"message.gohtml")
 	var err error
 	dashboard, err = template.ParseFiles(viewsDir + "dashboard.gohtml")
@@ -50,52 +50,65 @@ func Start(client *cli.Client, server *svr.Server) error {
 
 	router := httprouter.New()
 	router.GET("/", indexHandler)
-	router.GET("/contact", contactHandler)
-	router.GET("/message", msgHandler)
-	router.POST("/message", msgHandler)
+	router.GET("/message", msgGetHandler)
+	router.GET("/server/dashboard", dashboardHandler)
+	router.GET("/server/last-update-TS", srvUpdateHandler)
 
-	router.GET("/dashboard", dashboardHandler)
+	router.POST("/message", msgPostHandler)
 
 	return http.ListenAndServe(fmt.Sprintf(":%d", client.Node.ConsolePort), router)
 
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	index.Render(w, nil)
+	index.Render(w, nil, nil)
 }
 
-func contactHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	contact.Render(w, nil)
-}
-
-func msgHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func srvUpdateHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	switch r.Method {
 	case "GET":
-		msg.Render(w, nil)
-	case "POST":
-		// msg := fmt.Sprintf("Post called:%s message: %s", r.FormValue("userid"), r.FormValue("message"))
-		// fmt.Printf(msg)
-
-		// fmt.Fprintf(w, "Get form values: %v", r.Form)
-
-		records := []*pb.ChatMsg{}
-		userid, err := strconv.Atoi(r.FormValue("userid"))
-		if err != nil {
-			fmt.Fprintf(w, "Can not convert to number:%s", err)
-
+		lastMsgXchgAt := console.Svr.LastMsgReceivedAt
+		if console.Cli.LastMsgSentAt.After(lastMsgXchgAt) {
+			lastMsgXchgAt = console.Cli.LastMsgSentAt
 		}
-		records = append(records, &pb.ChatMsg{
-			Userid:  int32(userid),
-			Message: r.FormValue("message"),
-		})
 
-		err = console.Cli.PromoteDataChange(records)
-		if err != nil {
-			fmt.Fprintf(w, "%v", err)
-		} else {
-			msg.Render(w, nil)
-		}
+		fmt.Fprintf(w, "%s", lastMsgXchgAt)
+	default:
+		log.Fatalf("srvUpdateHandler:unknown http method %v", r.Method)
 	}
+}
+
+func msgGetHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	msg.Render(w, console, nil)
+}
+
+func msgPostHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	flashes := map[string]string{}
+	err := postMsg(r.FormValue("userid"), r.FormValue("message"))
+	if err != nil {
+		flashes["danger"] = err.Error()
+	}
+	msg.Render(w, console, flashes)
+}
+
+func postMsg(uid, msg string) error {
+
+	if uid == "" || msg == "" {
+		return errors.New("User ID and Message must be filled!")
+	}
+
+	userid, err := strconv.Atoi(uid)
+	if err != nil {
+		return errors.Wrapf(err, "User ID %q must be a number!", uid)
+	}
+
+	records := []*pb.ChatMsg{}
+	records = append(records, &pb.ChatMsg{
+		Userid:  int32(userid),
+		Message: msg,
+	})
+
+	return console.Cli.PromoteDataChange(records)
 }
 
 func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -108,10 +121,3 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Param
 	// fmt.Fprintf(w, "%v", client)
 
 }
-
-// func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-// 	if err := dashboard.ExecuteTemplate(w, "dashboard.gohtml", stat); err != nil {
-// 		log.Fatal(errors.Wrap(err, "dashboardHandler"))
-// 	}
-
-// }

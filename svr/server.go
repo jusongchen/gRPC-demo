@@ -16,9 +16,9 @@ import (
 
 // Server  not exported
 type Server struct {
-	c               *cli.Client
-	NumMsgReceived  int64
-	LastMsgReceived time.Time
+	c                 *cli.Client
+	NumMsgReceived    int64
+	LastMsgReceivedAt time.Time
 }
 
 //NodeChange not exported
@@ -84,7 +84,7 @@ func (s *Server) DataChange(stream pb.SyncUp_DataChangeServer) error {
 	var rowCount int64
 	defer func() {
 		s.NumMsgReceived += rowCount
-		s.LastMsgReceived = time.Now()
+		s.LastMsgReceivedAt = time.Now()
 	}()
 	startTime := time.Now()
 	for {

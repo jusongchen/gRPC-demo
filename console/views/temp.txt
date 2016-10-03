@@ -1,0 +1,23 @@
+
+  /*  var lastChangeTS ,newChangeTS
+
+    function isSrvUpdated() {
+            $.get("/server/last-update-TS",    function( data ,status) {
+                newChangeTS = data;
+                console.log("Data: " + data + "\nnewChangeTS"+newChangeTS+"\nStatus: " + status);
+                  
+            });
+
+            console.log( "out of callback: newChangeTS:"+ newChangeTS );
+
+            if (lastChangeTS == newChangeTS) {
+                console.log ("no changes"+lastChangeTS+"  newChangeTS:"+newChangeTS);
+                return false;
+            }
+            console.log ("Changes:"+lastChangeTS+"  newChangeTS:"+newChangeTS);
+            //New change detected
+            lastChangeTS = newChangeTS;
+            return true;
+    }
+*/
+
