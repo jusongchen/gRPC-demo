@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 
-	pb "github.com/jusongchen/gRPC-demo/replica"
+	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )

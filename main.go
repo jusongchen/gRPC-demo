@@ -19,7 +19,7 @@ import (
 
 	"github.com/jusongchen/gRPC-demo/cli"
 	"github.com/jusongchen/gRPC-demo/console"
-	pb "github.com/jusongchen/gRPC-demo/replica"
+	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/jusongchen/gRPC-demo/svr"
 	"github.com/pkg/errors"
 )

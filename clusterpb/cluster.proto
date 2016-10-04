@@ -1,4 +1,6 @@
 syntax = "proto3";
+package serverpb;
+option go_package = "serverpb";
 
 service SyncUp {
   // DataChange() send data change requests to peers
@@ -44,7 +46,7 @@ message NodeChgRequest {
     QUIT  = 2;
     //request to add a node to the server list as a new node just joined
     ADD   = 3;
-    //Request to drop a node from the server list as a node just  quit
+    //Request to drop a node from the server list as a node is about to quit
     DROP  = 4;
   }
   Operations operation =1; 

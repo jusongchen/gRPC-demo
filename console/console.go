@@ -10,8 +10,8 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/jusongchen/gRPC-demo/cli"
+	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/jusongchen/gRPC-demo/console/views"
-	pb "github.com/jusongchen/gRPC-demo/replica"
 	"github.com/jusongchen/gRPC-demo/svr"
 	"github.com/pkg/errors"
 )
