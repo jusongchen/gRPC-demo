@@ -56,13 +56,13 @@ message NodeChgRequest {
 
 
 message NodeChgResponse{
-  bool fail = 1;
-  string err_msg  =2;
+  //success if empty string returned
+  string err_msg  =1;
 }
 
 
 message NodeQryRequest {
-  Node scrNode  =1;
+  Node scr_node  =1;
 }
 
 message NodeQryResponse {

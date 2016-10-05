@@ -31,40 +31,28 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 		s.c.NodeChange(ctx, &pb.NodeChgRequest{Operation: pb.NodeChgRequest_ADD, Node: req.Node})
 
 		//add this new node as peer
-		if err := s.c.AddPeer(req.Node); err != nil {
-			return &pb.NodeChgResponse{Fail: true}, errors.Wrap(err, "Server:NodeChgJoin:AddPeer fail")
+		if err := s.c.UpdatePeer(req); err != nil {
+			return &pb.NodeChgResponse{ErrMsg: err.Error()}, errors.Wrap(err, "Server:NodeChgJoin:AddPeer fail")
 		}
-		return &pb.NodeChgResponse{Fail: false}, nil
+		return &pb.NodeChgResponse{}, nil
 
 	case pb.NodeChgRequest_ADD:
-		//notify all clients to add Node
 
-		// log.Printf("get NodeChgRequest:AddNode:%s", req.NodeAddr)
 		//add this new node as peer
-		if err := s.c.AddPeer(req.Node); err != nil {
-			resp := pb.NodeChgResponse{Fail: true,
-				ErrMsg: fmt.Sprintf("Server.NodeChange:AddPeer %v failed", *req.Node),
-			}
+		if err := s.c.UpdatePeer(req); err != nil {
+			resp := pb.NodeChgResponse{ErrMsg: fmt.Sprintf("Server.NodeChange:AddPeer %v failed", *req.Node)}
 			return &resp, errors.Wrap(err, "Server:NodeChgJoin:AddPeer fail")
 		}
-		return &pb.NodeChgResponse{Fail: false}, nil
+		return &pb.NodeChgResponse{}, nil
 
 	case pb.NodeChgRequest_DROP:
 		var err error
 		//identify the peer and mark its status as quit
-		for i := range s.c.Peers {
-			p := &s.c.Peers[i]
-			if p.Node.Hostname == req.Node.Hostname && p.Node.RPCPort == req.Node.RPCPort {
-				err = p.ClientConn.Close()
-				p.RpcClient = nil
-				p.ClientConn = nil
-				p.Status = cli.PEER_QUIT
-			}
-		}
+		err = s.c.UpdatePeer(req)
 		if err == nil {
 			return &pb.NodeChgResponse{}, nil
 		}
-		return &pb.NodeChgResponse{Fail: true}, err
+		return &pb.NodeChgResponse{ErrMsg: err.Error()}, err
 
 	default:
 		log.Fatalf("Server NodeChange:unknown Operation %v", req.Operation)
@@ -73,6 +61,7 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 	return &pb.NodeChgResponse{}, nil
 }
 
+//NodeQuery to implement pb.SyncUpServer
 func (s *Server) NodeQuery(ctx context.Context, req *pb.NodeQryRequest) (*pb.NodeQryResponse, error) {
 	// fmt.Printf("\nServer get Node query request:%#v\n", req)
 	// rpcAddr := fmt.Sprintf("%s:%d", s.c.Hostname, s.c.RPCPort)
@@ -91,11 +80,13 @@ func (s *Server) NodeQuery(ctx context.Context, req *pb.NodeQryRequest) (*pb.Nod
 	return &pb.NodeQryResponse{Nodes: nodes}, nil
 }
 
+//Ping impletes pb.SyncUpServer
 func (s *Server) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
 
 	return nil, nil
 }
 
+//DataChange implements pb.SyncUpServer
 func (s *Server) DataChange(stream pb.SyncUp_DataChangeServer) error {
 
 	var rowCount int64

@@ -54,7 +54,7 @@ func handleSignals(c *cli.Client) {
 
 		ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		if err := c.NodeChange(ctx, &req); err != nil {
-			log.Fatal(errors.Wrapf(err, "%q NodeChange", *c))
+			log.Fatal(errors.Wrapf(err, "handleSignals:%q NodeChange", *c))
 		}
 
 		fmt.Printf("\nPeers notified.")
