@@ -13,13 +13,33 @@ import (
 	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
+
+type peerStatus int32
+
+const (
+	//PEER_ACTIVE       peerStatus = 0
+	PEER_ACTIVE peerStatus = 0
+	// PEER_QUIT         peerStatus = 1
+	PEER_QUIT peerStatus = 1
+	// PEER_DISCONNECTED peerStatus = 2
+	PEER_DISCONNECTED peerStatus = 2
+)
+
+var peerStatus_name = map[int32]string{
+	0: "ACTIVE",
+	1: "QUIT",
+	2: "DISCONNECTED",
+}
 
 //Peer not exported
 type Peer struct {
 	Node             pb.Node
 	Addr             string
 	RpcClient        pb.SyncUpClient
+	ClientConn       *grpc.ClientConn
+	Status           peerStatus
 	in               chan *pb.ChatMsg
 	LastRpcErr       error
 	NumMsgSent       int64
@@ -40,31 +60,34 @@ type nodeChgResult struct {
 	err error
 }
 
+func (p *Peer) GetStatus() string {
+	return peerStatus_name[int32(p.Status)]
+}
+
+func (p *Peer) IsActive() bool {
+	return p.Status == PEER_ACTIVE
+}
+
 //NodeChange handles node change request
 func (c *Client) NodeChange(ctx context.Context, req *pb.NodeChgRequest, opts ...grpc.CallOption) error {
 
-	ch := make(chan *nodeChgResult, len(c.Peers))
+	// ch := make(chan *nodeChgResult, len(c.Peers))
+	g, ctx := errgroup.WithContext(ctx)
 
-	for _, b := range c.Peers {
-		go func(peer pb.SyncUpClient) {
-			res, err := peer.NodeChange(ctx, req)
-			ch <- &nodeChgResult{res, err}
-		}(b.RpcClient)
-	}
-
-	// chgResp := pb.NodeChgResponse{}
-
-	var err error
 	for i := range c.Peers {
-		// res []*pb.NodeChgResponse
-		r := <-ch
-		if r.err != nil {
-			log.Printf("From client %v: %s", c.Peers[i].Node, r.err.Error())
-			err = r.err
+		rpcClient := c.Peers[i].RpcClient
+		if rpcClient == nil {
+			continue //NOT a ACTIVE peer
 		}
+		g.Go(func() error {
+			res, err := rpcClient.NodeChange(ctx, req)
+			if err == nil || res == nil {
+				return err
+			}
+			return errors.Wrap(err, res.ErrMsg)
+		})
 	}
-	return err
-	// return &pb.NodeChgResponse{Success:true}, nil
+	return g.Wait()
 }
 
 func (c *Client) nodeQuery(ctx context.Context, req *pb.NodeQryRequest, opts ...grpc.CallOption) (*pb.NodeQryResponse, error) {
@@ -93,8 +116,7 @@ func (c *Client) ConnToPeers(joinTo *pb.Node) error {
 	if err := c.AddPeer(joinTo); err != nil {
 		return errors.Wrapf(err, "JoinCluster addPeer %v fail", joinTo)
 	}
-
-	ctx := context.Background()
+	ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
 
 	//making a Node Join request
 	// addr := fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
@@ -134,18 +156,30 @@ func (c *Client) queryAndAddPeers(joinTo *pb.Node) error {
 	return err
 }
 
+func (c *Client) findPeerToModify(n *pb.Node) *Peer {
+
+	for i := range c.Peers {
+		p := &c.Peers[i]
+		node := p.Node
+		if node.Hostname == n.Hostname && node.RPCPort == n.RPCPort {
+			return p
+		}
+	}
+	return nil
+}
+
 func (c *Client) AddPeer(n *pb.Node) error {
 
 	//check if client has already registered, change Console port
-	for i := range c.Peers {
-		node := &c.Peers[i].Node
-		if node.Hostname == n.Hostname && node.RPCPort == n.RPCPort {
-			node.ConsolePort = n.ConsolePort
+	peer2Modify := c.findPeerToModify(n)
+	if peer2Modify != nil {
+		peer2Modify.Node.ConsolePort = n.ConsolePort
+		if peer2Modify.Status == PEER_ACTIVE { //nothing more to do if this is alread active
 			return nil
 		}
 	}
 
-	//do not add this node
+	//do not add this own server
 	if n.Hostname == c.Node.Hostname && n.RPCPort == c.Node.RPCPort {
 		return nil
 	}
@@ -155,14 +189,26 @@ func (c *Client) AddPeer(n *pb.Node) error {
 	if err != nil {
 		return errors.Wrapf(err, "grpc.Dail to %s fail", clientAddr)
 	}
-	// log.Printf("Connected to peer:%s\n", clientAddr)
-	// c.inCluster = true
 
-	peer := Peer{
-		Node:      *n,
-		RpcClient: pb.NewSyncUpClient(conn),
-		in:        make(chan *pb.ChatMsg),
+	rpcClient := pb.NewSyncUpClient(conn)
+
+	//peer alread registered
+	if peer2Modify != nil {
+		peer2Modify.Status = PEER_ACTIVE
+		peer2Modify.ClientConn = conn
+		peer2Modify.RpcClient = rpcClient
+		return nil
 	}
+
+	//not peer
+	peer := Peer{
+		Node:       *n,
+		ClientConn: conn,
+		Status:     PEER_ACTIVE,
+		RpcClient:  rpcClient,
+		in:         make(chan *pb.ChatMsg),
+	}
+
 	peer.Addr = fmt.Sprintf("%s:%d", peer.Node.Hostname, peer.Node.RPCPort)
 	c.Peers = append(c.Peers, peer)
 	log.Printf("Server %v: peer update:", c.Node)

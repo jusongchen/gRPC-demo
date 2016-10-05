@@ -49,6 +49,23 @@ func (s *Server) NodeChange(ctx context.Context, req *pb.NodeChgRequest) (*pb.No
 		}
 		return &pb.NodeChgResponse{Fail: false}, nil
 
+	case pb.NodeChgRequest_DROP:
+		var err error
+		//identify the peer and mark its status as quit
+		for i := range s.c.Peers {
+			p := &s.c.Peers[i]
+			if p.Node.Hostname == req.Node.Hostname && p.Node.RPCPort == req.Node.RPCPort {
+				err = p.ClientConn.Close()
+				p.RpcClient = nil
+				p.ClientConn = nil
+				p.Status = cli.PEER_QUIT
+			}
+		}
+		if err == nil {
+			return &pb.NodeChgResponse{}, nil
+		}
+		return &pb.NodeChgResponse{Fail: true}, err
+
 	default:
 		log.Fatalf("Server NodeChange:unknown Operation %v", req.Operation)
 	}

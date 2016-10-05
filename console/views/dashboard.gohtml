@@ -7,6 +7,7 @@
 				<thead>
 					<tr>
 					<th>To Peer</th>
+					<th>Peer Status</th>
 					<th>In Total</th>
 					<th>Last Sent At</th>
 					<th>Last Sent Duration</th>
@@ -15,7 +16,8 @@
 				<tbody>
 					{{range .Cli.Peers}}
 						<tr>
-						<th><a href="http://{{.Node.Hostname}}:{{.Node.ConsolePort}}/message"> {{.Addr}} </a></th>
+						<th><a {{if .IsActive}}  href="http://{{.Node.Hostname}}:{{.Node.ConsolePort}}/message" {{else}}# {{end}}>  {{.Addr}} </a></th>
+						<th>{{.GetStatus}}</th>
 						<th>{{.NumMsgSent}}</th>
 						<th>{{if .NumMsgSent }} {{.LastMsgSentAt}} {{end}}</th>
 						<th>{{with .LastSentDuration}} {{.}} {{end}}</th>
