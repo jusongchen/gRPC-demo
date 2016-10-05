@@ -9,18 +9,17 @@ import (
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/jusongchen/gRPC-demo/cli"
+	clu "github.com/jusongchen/gRPC-demo/cluster"
+	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/jusongchen/gRPC-demo/console/views"
-	pb "github.com/jusongchen/gRPC-demo/replica"
-	"github.com/jusongchen/gRPC-demo/svr"
 	"github.com/pkg/errors"
 )
 
 //Console is not exported
 type Console struct {
 	// ConsolePort int
-	Cli *cli.Client
-	Svr *svr.Server
+	*clu.Client
+	*clu.Server
 }
 
 var (
@@ -32,12 +31,12 @@ var (
 )
 
 //Start starts an http Server
-func Start(client *cli.Client, server *svr.Server) error {
+func Start(client *clu.Client, server *clu.Server) error {
 
 	console = Console{
 		// ConsolePort: consolePort,
-		Cli: client,
-		Svr: server,
+		Client: client,
+		Server: server,
 	}
 
 	index = views.NewView("bootstrap", viewsDir+"index.gohtml")
@@ -67,12 +66,16 @@ func indexHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 func srvUpdateHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	switch r.Method {
 	case "GET":
-		lastMsgXchgAt := console.Svr.LastMsgReceivedAt
-		if console.Cli.LastMsgSentAt.After(lastMsgXchgAt) {
-			lastMsgXchgAt = console.Cli.LastMsgSentAt
+
+		lastChangeAt := console.LastMsgReceivedAt
+		if console.LastMsgSentAt.After(lastChangeAt) {
+			lastChangeAt = console.LastMsgSentAt
 		}
 
-		fmt.Fprintf(w, "%s", lastMsgXchgAt)
+		if console.LastNodeChangeAt.After(lastChangeAt) {
+			lastChangeAt = console.LastNodeChangeAt
+		}
+		fmt.Fprintf(w, "%s", lastChangeAt)
 	default:
 		log.Fatalf("srvUpdateHandler:unknown http method %v", r.Method)
 	}
@@ -108,7 +111,7 @@ func postMsg(uid, msg string) error {
 		Message: msg,
 	})
 
-	return console.Cli.PromoteDataChange(records)
+	return console.PromoteDataChange(records)
 }
 
 func dashboardHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

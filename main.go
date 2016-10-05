@@ -15,12 +15,13 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"google.golang.org/grpc"
 
-	"github.com/jusongchen/gRPC-demo/cli"
+	clu "github.com/jusongchen/gRPC-demo/cluster"
+	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/jusongchen/gRPC-demo/console"
-	pb "github.com/jusongchen/gRPC-demo/replica"
-	"github.com/jusongchen/gRPC-demo/svr"
 	"github.com/pkg/errors"
 )
 
@@ -33,7 +34,7 @@ var (
 	consolePort = flag.Int("ConsolePort", 8080, "the port for the console to bind to.")
 )
 
-func handleSignals() {
+func handleSignals(c *clu.Client) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
@@ -43,8 +44,19 @@ func handleSignals() {
 	// signal.Notify(signalCh, os.Interrupt)
 	go func() {
 		<-signalCh
+		fmt.Printf("\nNotifying peers this node is about to quit ...")
 
-		fmt.Printf("\n processing signal")
+		req := pb.NodeChgRequest{
+			Operation: pb.NodeChgRequest_DROP,
+			Node:      &c.Node,
+		}
+
+		ctx, _ := context.WithTimeout(context.Background(), clu.NetworkTimeout)
+		if err := c.NodeChange(ctx, &req); err != nil {
+			log.Fatal(errors.Wrapf(err, "handleSignals:%q NodeChange", *c))
+		}
+
+		fmt.Printf("\nPeers notified.")
 		wg.Done()
 	}()
 	wg.Wait()
@@ -55,11 +67,9 @@ func handleSignals() {
 func main() {
 	flag.Parse()
 
-	go handleSignals()
-
-	client := cli.NewClient(int32(*serverPort), int32(*consolePort))
-	// var server *svr.Server
-	server := svr.NewServer(client)
+	client := clu.NewClient(int32(*serverPort), int32(*consolePort))
+	// var server *Server
+	server := clu.NewServer(client)
 
 	go func() {
 		//launch the server goroutine
@@ -88,6 +98,11 @@ func main() {
 	}
 	//need to wait for server to start up first
 	time.Sleep(time.Millisecond * 100)
-	client.ConnToPeers(joinToNode)
+	go handleSignals(client)
+
+	if err := client.ConnToPeers(joinToNode); err != nil {
+		log.Fatal(err)
+	}
+
 	log.Fatal(console.Start(client, server))
 }
