@@ -1,5 +1,5 @@
-// Package cli handles requests and promote changes to  peers.
-package cli
+// Package cluster handles requests and promote changes to  peers.
+package cluster
 
 import (
 	"fmt"
@@ -11,12 +11,22 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 
-	//	"github.com/jusongchen/gRPC-demo/cli"
+	//	"github.com/jusongchen/gRPC-demo/cluster"
 
 	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
+)
+
+// Base context defaults.
+const (
+	defaultInsecure = false
+	// defaultUser     = security.RootUser
+	httpScheme  = "http"
+	httpsScheme = "https"
+	// NetworkTimeout is the timeout used for network operations.
+	NetworkTimeout = 3 * time.Second
 )
 
 type peerStatus int32
@@ -54,9 +64,10 @@ type Peer struct {
 
 //Client not exported
 type Client struct {
-	Node          pb.Node
-	LastMsgSentAt time.Time
-	Peers         []Peer
+	Node             pb.Node
+	LastMsgSentAt    time.Time
+	LastNodeChangeAt time.Time
+	Peers            []Peer
 }
 
 type nodeChgResult struct {
@@ -140,11 +151,11 @@ func (c *Client) ConnToPeers(joinTo *pb.Node) error {
 		return nil
 	}
 
-	//add first peer, we do not know the console port yet. Once we get all peer list, console port will be updated
+	// add first peer, we do not know the console port yet. Once we get all peer list, console port will be updated
 	if err := c.upSertPeer(joinTo); err != nil {
 		return errors.Wrapf(err, "JoinCluster addPeer %v fail", joinTo)
 	}
-	ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, _ := context.WithTimeout(context.Background(), NetworkTimeout)
 
 	//making a Node Join request
 	// addr := fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
@@ -155,33 +166,7 @@ func (c *Client) ConnToPeers(joinTo *pb.Node) error {
 		err = errors.Wrap(err, "rpc NodeChange fail")
 		return err
 	}
-
-	return c.queryAndAddPeers(joinTo)
-}
-
-func (c *Client) queryAndAddPeers(joinTo *pb.Node) error {
-
-	ctx := context.Background()
-
-	//making a Node Query Request to get a list of nodes from the peer this node joined to
-	// fmt.Sprintf("%s:%d", c.Node.Hostname, c.Node.RPCPort)
-	req := &pb.NodeQryRequest{ScrNode: joinTo}
-	res, err := c.nodeQuery(ctx, req)
-	if err != nil {
-		errors.Wrapf(err, "QueryAndAddPeers:%v", c.Node)
-		return err
-	}
-
-	//for each addresses, add them as peer
-	for _, n := range res.Nodes {
-		// log.Printf("%v:Get peers:%v\n", c.Node, n)
-		errAdd := c.upSertPeer(n)
-		if errAdd != nil {
-			err = errAdd
-		}
-
-	}
-	return err
+	return nil
 }
 
 //FindPeerByNode search and find matched peer
@@ -196,8 +181,10 @@ func (c *Client) FindPeerByNode(n *pb.Node) *Peer {
 	return nil
 }
 
-func (c *Client) reportPeerStatus() {
-	log.Println("Peers update:")
+func (c *Client) updateLastNodeChange() {
+	c.LastNodeChangeAt = time.Now()
+
+	log.Printf("Peer List At %v:", c.LastNodeChangeAt)
 	for i := range c.Peers {
 		log.Printf("Peer %v status %s", c.Peers[i].Node, c.Peers[i].GetStatus())
 	}
@@ -219,7 +206,7 @@ func (c *Client) UpdatePeer(req *pb.NodeChgRequest) error {
 
 //DisconnectPeer disconnects the peer
 func (c *Client) DisconnectPeer(n *pb.Node) error {
-	defer c.reportPeerStatus()
+	defer c.updateLastNodeChange()
 
 	//check if client has already registered, change Console port
 	p := c.FindPeerByNode(n)
@@ -237,7 +224,6 @@ func (c *Client) DisconnectPeer(n *pb.Node) error {
 //
 //UpdatePeers update peers
 func (c *Client) upSertPeer(n *pb.Node) error {
-	defer c.reportPeerStatus()
 
 	//check if client has already registered, change Console port
 	peer2Modify := c.FindPeerByNode(n)
@@ -259,6 +245,9 @@ func (c *Client) upSertPeer(n *pb.Node) error {
 		return errors.Wrapf(err, "grpc.Dail to %s fail", clientAddr)
 	}
 
+	//here on, there will be a change to peers
+	defer c.updateLastNodeChange()
+
 	rpcClient := pb.NewSyncUpClient(conn)
 
 	//peer alread registered
@@ -266,20 +255,25 @@ func (c *Client) upSertPeer(n *pb.Node) error {
 		peer2Modify.Status = PEER_ACTIVE
 		peer2Modify.ClientConn = conn
 		peer2Modify.RPCClient = rpcClient
-		return nil
+	} else {
+		//new peer
+		peer := Peer{
+			Node:       *n,
+			ClientConn: conn,
+			Status:     PEER_ACTIVE,
+			RPCClient:  rpcClient,
+			// in:         make(chan *pb.ChatMsg),
+		}
+		c.Peers = append(c.Peers, peer)
 	}
-
-	//new peer
-	peer := Peer{
-		Node:       *n,
-		ClientConn: conn,
-		Status:     PEER_ACTIVE,
-		RPCClient:  rpcClient,
-		// in:         make(chan *pb.ChatMsg),
+	//when it is a new peer connection, send add this node request to the new peer
+	ctx, _ := context.WithTimeout(context.Background(), NetworkTimeout)
+	req := &pb.NodeChgRequest{Operation: pb.NodeChgRequest_ADD, Node: &c.Node}
+	err = c.NodeChange(ctx, req)
+	if err != nil {
+		err = errors.Wrap(err, "rpc NodeChange fail")
 	}
-
-	c.Peers = append(c.Peers, peer)
-	return nil
+	return err
 }
 
 // NewClient creates a NewClient instance

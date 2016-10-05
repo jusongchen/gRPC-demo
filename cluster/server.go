@@ -1,5 +1,5 @@
-//Package svr handles gRPC requests from peers
-package svr
+//Package cluster manage cluster nodes
+package cluster
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 	// _ "net/http/pprof"
 	"time"
 
-	"github.com/jusongchen/gRPC-demo/cli"
 	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -16,7 +15,7 @@ import (
 
 // Server  not exported
 type Server struct {
-	c                 *cli.Client
+	c                 *Client
 	NumMsgReceived    int64
 	LastMsgReceivedAt time.Time
 }
@@ -125,6 +124,6 @@ func (s *Server) insert2DB(r *pb.ChatMsg) error {
 }
 
 //NewServer create an Server instance
-func NewServer(client *cli.Client) *Server {
+func NewServer(client *Client) *Server {
 	return &Server{c: client}
 }

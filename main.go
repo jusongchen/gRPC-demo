@@ -19,10 +19,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/jusongchen/gRPC-demo/cli"
+	clu "github.com/jusongchen/gRPC-demo/cluster"
 	pb "github.com/jusongchen/gRPC-demo/clusterpb"
 	"github.com/jusongchen/gRPC-demo/console"
-	"github.com/jusongchen/gRPC-demo/svr"
 	"github.com/pkg/errors"
 )
 
@@ -35,7 +34,7 @@ var (
 	consolePort = flag.Int("ConsolePort", 8080, "the port for the console to bind to.")
 )
 
-func handleSignals(c *cli.Client) {
+func handleSignals(c *clu.Client) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
@@ -52,7 +51,7 @@ func handleSignals(c *cli.Client) {
 			Node:      &c.Node,
 		}
 
-		ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		ctx, _ := context.WithTimeout(context.Background(), clu.NetworkTimeout)
 		if err := c.NodeChange(ctx, &req); err != nil {
 			log.Fatal(errors.Wrapf(err, "handleSignals:%q NodeChange", *c))
 		}
@@ -68,9 +67,9 @@ func handleSignals(c *cli.Client) {
 func main() {
 	flag.Parse()
 
-	client := cli.NewClient(int32(*serverPort), int32(*consolePort))
-	// var server *svr.Server
-	server := svr.NewServer(client)
+	client := clu.NewClient(int32(*serverPort), int32(*consolePort))
+	// var server *Server
+	server := clu.NewServer(client)
 
 	go func() {
 		//launch the server goroutine
